@@ -10,7 +10,7 @@ set(CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake" ${CMAKE_MODULE_PATH})
 
 find_package(Sanitizers) # Address sanitizer.
 
-add_definitions("-DEIGEN_AVOID_STL_ARRAY")
+#add_definitions("-DEIGEN_AVOID_STL_ARRAY")
 
 # threads
 find_package(Threads)
@@ -65,6 +65,9 @@ message("* Current build type is : ${CMAKE_BUILD_TYPE}")
 # C++14
 set (CMAKE_CXX_STANDARD 14)
 
+# PIC
+set (CMAKE_POSITION_INDEPENDENT_CODE ON)
+
 include_directories(
     ${CMAKE_SOURCE_DIR}/src
     
@@ -74,7 +77,9 @@ set (CORE_SOURCE
     ${CMAKE_SOURCE_DIR}/src/main.cc
     )
 
-link_directories(${TENSORFLOW_BUILD_DIR})
+link_directories(
+    ${TENSORFLOW_BUILD_DIR}
+    )
 
 add_executable( prnet
     ${CORE_SOURCE}
@@ -82,24 +87,25 @@ add_executable( prnet
 
 target_include_directories(prnet
     PUBLIC ${TENSORFLOW_DIR}
+
     # for array_ops.h
     PUBLIC ${TENSORFLOW_DIR}/bazel-genfiles
+
+    # headers for external packages
+    PUBLIC ${TENSORFLOW_EXTERNAL_DIR}/external/protobuf_archive/src
+    PUBLIC ${TENSORFLOW_EXTERNAL_DIR}/external/eigen_archive
+    PUBLIC ${TENSORFLOW_EXTERNAL_DIR}/external/nsync/public
+
+    # this project
     PUBLIC ${CMAKE_SOURCE_DIR}/src
-    PUBLIC ${TENSORFLOW_BUILD_DIR}
-    PUBLIC ${TENSORFLOW_BUILD_DIR}/external/zlib_archive
-    PUBLIC ${TENSORFLOW_BUILD_DIR}/external/giflib-5.1.4
-    PUBLIC ${TENSORFLOW_BUILD_DIR}/tools/pip_package/build_pip_package.runfiles/org_tensorflow/
-    PUBLIC ${TENSORFLOW_BUILD_DIR}/tools/pip_package/build_pip_package.runfiles/eigen_archive
-    PUBLIC ${TENSORFLOW_BUILD_DIR}/tools/pip_package/build_pip_package.runfiles/protobuf_archive/src
-    PUBLIC ${TENSORFLOW_BUILD_DIR}/tools/pip_package/build_pip_package.runfiles/nsync/public
 )
 
 target_link_libraries( prnet
     tensorflow_cc
-    tensorflow_framework
-    tensorflow
     ${CMAKE_THREAD_LIBS_INIT}
-    ${CMAKE_DL_LIBS})
+    ${CMAKE_DL_LIBS}
+    )
+
 
 # Increase warning level for clang.
 IF (CMAKE_CXX_COMPILER_ID MATCHES "Clang")
@@ -107,6 +113,19 @@ IF (CMAKE_CXX_COMPILER_ID MATCHES "Clang")
 ENDIF ()
 
 add_sanitizers(prnet)
+
+# # Tensorflow thing.
+# # Fix for "No session factory registered for the given session" error in the runtime.
+# if (UNIX AND NOT APPLE)
+#   # https://github.com/tensorflow/tensorflow/issues/3308
+#   # TARGET_LINK_LIBRARIES(prnet -Wl,--allow-multiple-definition -Wl,--whole-archive "${TENSORFLOW_DIR}/bazel-bin/tensorflow/libtensorflow_cc.so" -Wl,--no-whole-archive)
+# endif ()
+# 
+# if (UNIX AND NOT APPLE)
+#    # # Make sure that we don't strip global constructors on Linux.
+#    # https://github.com/tensorflow/tensorflow/issues/3308
+#    #SET(CMAKE_EXE_LINKER_FLAGS "-Wl,--allow-multiple-definition -Wl,--whole-archive ${CMAKE_EXE_LINKER_FLAGS}")
+# endif ()
 
 # [VisualStudio]
 if (WIN32)
