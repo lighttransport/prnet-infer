@@ -3,18 +3,6 @@
 #pragma clang diagnostic ignored "-Weverything"
 #endif
 
-//#include "tensorflow/cc/client/client_session.h"
-//#include "tensorflow/cc/ops/standard_ops.h"
-//#include "tensorflow/core/framework/tensor.h"
-//#include "tensorflow/core/protobuf/meta_graph.pb.h"
-//#include "tensorflow/core/public/session.h"
-//#include "tensorflow/core/public/session_options.h"
-//
-//#include "tensorflow/cc/saved_model/loader.h"
-//
-//#include "tensorflow/core/platform/init_main.h"
-//#include "tensorflow/core/util/command_line_flags.h"
-
 #include "tensorflow/cc/ops/const_op.h"
 #include "tensorflow/cc/ops/image_ops.h"
 #include "tensorflow/cc/ops/standard_ops.h"
@@ -34,8 +22,8 @@
 #include "tensorflow/core/public/session.h"
 #include "tensorflow/core/util/command_line_flags.h"
 
-
-#include "cxxopts.hpp"
+#define STB_IMAGE_WRITE_IMPLEMENTATION
+#include "stb_image_write.h"
 
 #ifdef __clang__
 #pragma clang diagnostic pop
@@ -43,113 +31,155 @@
 
 using namespace tensorflow;
 
-typedef std::vector<std::pair<std::string, tensorflow::Tensor>> tensor_dict;
 
-tensorflow::Status LoadModel(std::unique_ptr<tensorflow::Session> *sess, std::string graph_fn, std::string checkpoint_fn = "") {
-  tensorflow::Status status;
+static Status ReadEntireFile(tensorflow::Env* env, const string& filename,
+                             Tensor* output) {
+  tensorflow::uint64 file_size = 0;
+  TF_RETURN_IF_ERROR(env->GetFileSize(filename, &file_size));
 
-  // Read in the protobuf graph we exported
-  //tensorflow::MetaGraphDef graph_def;
-  tensorflow::GraphDef graph_def;
-  status = ReadBinaryProto(tensorflow::Env::Default(), graph_fn, &graph_def);
-  if (status != tensorflow::Status::OK()) {
-    std::cerr << "ReadBinaryProto failed." << std::endl;
-    std::cerr << status.ToString() << std::endl;
-    return status;
+  string contents;
+  contents.resize(file_size);
+
+  std::unique_ptr<tensorflow::RandomAccessFile> file;
+  TF_RETURN_IF_ERROR(env->NewRandomAccessFile(filename, &file));
+
+  tensorflow::StringPiece data;
+  TF_RETURN_IF_ERROR(file->Read(0, file_size, &data, &(contents)[0]));
+  if (data.size() != file_size) {
+    return tensorflow::errors::DataLoss("Truncated read of '", filename,
+                                        "' expected ", file_size, " got ",
+                                        data.size());
   }
-
-  int node_count = graph_def.node_size();
-  std::cout << "node_cout " << node_count << std::endl;
-
-#if 0
-  // create the graph
-  status = (*sess)->Create(graph_def);
-  if (status != tensorflow::Status::OK()) {
-    std::cerr << "Create the graph failed." << std::endl;
-    return status;
-  }
-#endif
-
-#if 0
-  for (int i = 0 ; i < node_count; i++) {
-    auto n = graph_def.node(i);
-    //if (n.name().find("nWeights") != std::string::npos) {
-      std::cout << "name : " << n.name() << std::endl;
-    //}
-  }
-#endif
-#if 0
-  // restore model from checkpoint, iff checkpoint is given
-  if (checkpoint_fn != "") {
-    std::cout << "restore..." << std::endl;
-    tensorflow::Tensor checkpointPathTensor(tensorflow::DT_STRING, tensorflow::TensorShape());
-    checkpointPathTensor.scalar<std::string>()() = checkpoint_fn;
-
-    //tensor_dict feed_dict = {{graph_def.saver_def().filename_tensor_name(), checkpointPathTensor}};
-    std::string restore_op_name = "resfcn256/Conv2d_transpose_16/Sigmond";
-    tensor_dict feed_dict = {{/* tensor_name */"", checkpointPathTensor}};
-    status = sess->Run(feed_dict, {}, {restore_op_name}, nullptr);
-    if (status != tensorflow::Status::OK()) {
-      std::cerr << "Restore model from checkpoint failed." << std::endl;
-      std::cerr << status.ToString() << std::endl;
-      return status;
-    }
-  } else {
-  {   
-    // virtual Status Run(const std::vector<std::pair<string, Tensor> >& inputs,
-    //                  const std::vector<string>& output_tensor_names,
-    //                  const std::vector<string>& target_node_names,
-    //                  std::vector<Tensor>* outputs) = 0;
-    status = sess->Run({}, {}, {"init"}, nullptr);
-    if (status != tensorflow::Status::OK()) {
-      std::cerr << "Run failed." << std::endl;
-      return status;
-    }
-  }
-#endif
-
-  sess->reset(tensorflow::NewSession(tensorflow::SessionOptions()));
-  Status session_create_status = (*sess)->Create(graph_def);
-  if (!session_create_status.ok()) {
-    std::cerr << session_create_status.ToString() << std::endl;
-    return session_create_status;
-  }
-
-  std::cout << "got it!" << std::endl;
-
-  return tensorflow::Status::OK();
+  output->scalar<string>()() = data.ToString();
+  return Status::OK();
 }
 
 
-#if 0
-tensorflow::Status LoadGraph(tensorflow::string graph_filename,
-                             std::unique_ptr<tensorflow::Session>* session) {
+// Given an image file name, read in the data, try to decode it as an image,
+// resize it to the requested size, and then scale the values as desired.
+Status ReadTensorFromImageFile(const string& file_name, const int input_height,
+                               const int input_width, const float input_mean,
+                               const float input_std,
+                               std::vector<Tensor>* out_tensors) {
+  auto root = tensorflow::Scope::NewRootScope();
+  using namespace ::tensorflow::ops;  // NOLINT(build/namespaces)
+
+  string input_name = "file_reader";
+  string output_name = "normalized";
+
+  // read file_name into a tensor named input
+  Tensor input(tensorflow::DT_STRING, tensorflow::TensorShape());
+  TF_RETURN_IF_ERROR(
+      ReadEntireFile(tensorflow::Env::Default(), file_name, &input));
+
+  // use a placeholder to read input data
+  auto file_reader =
+      Placeholder(root.WithOpName("input"), tensorflow::DataType::DT_STRING);
+
+  std::vector<std::pair<string, tensorflow::Tensor>> inputs = {
+      {"input", input},
+  };
+
+  // Now try to figure out what kind of file it is and decode it.
+  const int wanted_channels = 3;
+  tensorflow::Output image_reader;
+  if (tensorflow::str_util::EndsWith(file_name, ".png")) {
+    image_reader = DecodePng(root.WithOpName("png_reader"), file_reader,
+                             DecodePng::Channels(wanted_channels));
+  } else if (tensorflow::str_util::EndsWith(file_name, ".gif")) {
+    // gif decoder returns 4-D tensor, remove the first dim
+    image_reader =
+        Squeeze(root.WithOpName("squeeze_first_dim"),
+                DecodeGif(root.WithOpName("gif_reader"), file_reader));
+  } else if (tensorflow::str_util::EndsWith(file_name, ".bmp")) {
+    image_reader = DecodeBmp(root.WithOpName("bmp_reader"), file_reader);
+  } else {
+    // Assume if it's neither a PNG nor a GIF then it must be a JPEG.
+    image_reader = DecodeJpeg(root.WithOpName("jpeg_reader"), file_reader,
+                              DecodeJpeg::Channels(wanted_channels));
+  }
+  // Now cast the image data to float so we can do normal math on it.
+  auto float_caster =
+      Cast(root.WithOpName("float_caster"), image_reader, tensorflow::DT_FLOAT);
+  // The convention for image ops in TensorFlow is that all images are expected
+  // to be in batches, so that they're four-dimensional arrays with indices of
+  // [batch, height, width, channel]. Because we only have a single image, we
+  // have to add a batch dimension of 1 to the start with ExpandDims().
+  auto dims_expander = ExpandDims(root, float_caster, 0);
+  // Bilinearly resize the image to fit the required dimensions.
+  auto resized = ResizeBilinear(
+      root, dims_expander,
+      Const(root.WithOpName("size"), {input_height, input_width}));
+  // Subtract the mean and divide by the scale.
+  Div(root.WithOpName(output_name), Sub(root, resized, {input_mean}),
+      {input_std});
+
+  // This runs the GraphDef network definition that we've just constructed, and
+  // returns the results in the output tensor.
+  tensorflow::GraphDef graph;
+  TF_RETURN_IF_ERROR(root.ToGraphDef(&graph));
+
+  std::unique_ptr<tensorflow::Session> session(
+      tensorflow::NewSession(tensorflow::SessionOptions()));
+  TF_RETURN_IF_ERROR(session->Create(graph));
+  TF_RETURN_IF_ERROR(session->Run({inputs}, {output_name}, {}, out_tensors));
+  return Status::OK();
+}
+
+// Reads a model graph definition from disk, and creates a session object you
+// can use to run it.
+Status LoadGraph(const string& graph_file_name,
+                 std::unique_ptr<tensorflow::Session>* session) {
   tensorflow::GraphDef graph_def;
-  tensorflow::Status load_graph_status =
-      ReadBinaryProto(tensorflow::Env::Default(), graph_filename, &graph_def);
+  Status load_graph_status =
+      ReadBinaryProto(tensorflow::Env::Default(), graph_file_name, &graph_def);
   if (!load_graph_status.ok()) {
     return tensorflow::errors::NotFound("Failed to load compute graph at '",
-                                        graph_filename, "'");
+                                        graph_file_name, "'");
   }
   session->reset(tensorflow::NewSession(tensorflow::SessionOptions()));
-  tensorflow::Status session_create_status = (*session)->Create(graph_def);
+  Status session_create_status = (*session)->Create(graph_def);
   if (!session_create_status.ok()) {
     return session_create_status;
   }
-  return tensorflow::Status::OK();
+  return Status::OK();
 }
-#endif
+
+void SaveTensorAsImage(const TTypes<float, 4>::ConstTensor& tensor,
+                       const string& filename) {
+  assert(tensor.dimension(0) == 1);
+  const Eigen::Index height = tensor.dimension(1);
+  const Eigen::Index width = tensor.dimension(2);
+  const Eigen::Index channels = tensor.dimension(3);
+
+  // Cast to uchar8
+  std::vector<unsigned char> image(height * width * channels);
+  for (Eigen::Index y = 0; y < height; y++) {
+    for (Eigen::Index x = 0; x < width; x++) {
+      for (Eigen::Index c = 0; c < channels; c++) {
+        image[(y * width + x) * channels + c] =
+          static_cast<unsigned char>(tensor(0, y, x, c) * 255.f);
+      }
+    }
+  }
+
+  stbi_write_jpg(filename.c_str(), width, height, channels, &image.at(0), 0);
+}
 
 int main(int argc, char** argv) {
-  // std::string graph_filename = "trained_graph.pb";
-  // const string checkpointPath = "models/my-model";
 
   std::string graph_filename;
-  std::string checkpoint_filepath;
-  bool verbose = false;
-
+  std::string image_filename;
   std::vector<Flag> flag_list = {
-    Flag("graph", &graph_filename, "graph to be executed")};
+    Flag("graph", &graph_filename, "graph to be executed"),
+    Flag("image", &image_filename, "image to be executed")};
+
+  int input_width = 256;
+  int input_height = 256;
+  float input_mean = 0.f;
+  float input_std = 255.f;
+  std::string input_layer = "Placeholder";
+  std::string output_layer = "resfcn256/Conv2d_transpose_16/Sigmoid";
 
   string usage = tensorflow::Flags::Usage(argv[0], flag_list);
   const bool parse_result = tensorflow::Flags::Parse(&argc, argv, flag_list);
@@ -158,86 +188,44 @@ int main(int argc, char** argv) {
     return -1;
   }
 
+  // We need to call this to set up global state for TensorFlow.
   tensorflow::port::InitMain(argv[0], &argc, &argv);
 
-#if 0
-  cxxopts::Options options("PRNetInfer",
-                           "TensorFlow C++ version of PRNet inference");
-
-  options.add_options()("v,verbose", "Verbose output")(
-      "f,file", "Model filename", cxxopts::value<std::string>())(
-      "g,graph", "Graph filename", cxxopts::value<std::string>())(
-      "c,checkpoint", "Checkpoint path", cxxopts::value<std::string>());
-
-  auto result = options.parse(argc, argv);
-
-  if (!result.count("graph")) {
-    std::cerr << "Please specify graph filename" << std::endl;
-    return EXIT_FAILURE;
-  }
-
-  if (!result.count("checkpoint")) {
-    std::cerr << "Please specify checkpoint path" << std::endl;
-    return EXIT_FAILURE;
-  }
-
-  // const std::string model_name = result["file"].as<std::string>();
-  const std::string graph_filename = result["graph"].as<std::string>();
-  const std::string checkpoint_filepath =
-      result["checkpoint"].as<std::string>();
-  const bool verbose = result.count("verbose") ? true : false;
-#endif
-
-  // std::cout << "New session ..." << std::endl;
-  // Session* session;
-  // Status status = NewSession(SessionOptions(), &session);
-  // if (!status.ok()) {
-  //  std::cerr << "New session error : " << status.ToString() << std::endl;
-  //  return -1;
-  //}
-
-  //{
-  //  Status status = tensorflow::NewSession(sess_options, &sess);
-  //  if (!status.ok()) {
-  //    std::cerr << "New session error : " << status.ToString() << std::endl;
-  //    return -1;
-  //  }
-  //}
-
-  std::unique_ptr<tensorflow::Session> sess;
-  //tensorflow::SessionOptions sess_options;
-  //TF_CHECK_OK(tensorflow::NewSession(sess_options, &sess));
-  Status status = LoadModel(&sess, graph_filename, checkpoint_filepath);
-
-  std::cout << "Loaded graph. " << std::endl;
-
-#if 0
-  // Add the graph to the session
-  std::cout << "Create session ..." << std::endl;
-  status = session->Create(graph_def.graph_def());
-  if (!status.ok()) {
-    std::cerr << "Create session error: " << status.ToString() << std::endl;
+  // First we load and initialize the model.
+  std::unique_ptr<tensorflow::Session> session;
+  Status load_graph_status = LoadGraph(graph_filename, &session);
+  if (!load_graph_status.ok()) {
+    std::cerr << load_graph_status;
     return -1;
   }
-#endif
+  std::cout << "Loaded graph. " << std::endl;
 
-  // Read weights from the saved checkpoint
-  //std::cout << "Read weights from the saved checkpoint ..." << std::endl;
-  //Tensor checkpointPathTensor(DT_STRING, TensorShape());
-  //checkpointPathTensor.scalar<std::string>()() = checkpoint_filepath;
-#if 0
-  TF_CHECK_OK(session->Run(
-      {
-          {graph_def.saver_def().filename_tensor_name(), checkpointPathTensor},
-      },
-      {}, {graph_def.saver_def().restore_op_name()}, nullptr));
-#endif
+  // Get the image from disk as a float array of numbers, resized and normalized
+  // to the specifications the main graph expects.
+  std::vector<Tensor> input_tensors;
+  Status read_tensor_status =
+      ReadTensorFromImageFile(image_filename, input_width, input_height,
+                              input_mean, input_std, &input_tensors);
+  if (!read_tensor_status.ok()) {
+    std::cerr << read_tensor_status;
+    return -1;
+  }
+  const Tensor& input_tensor = input_tensors[0];
+  std::cout << "Loaded image. " << std::endl;
 
-  // TODO(syoyo): Implement
-  // auto feedDict = ...
-  // auto outputOps = ...
-  // std::vector<Tensor> outputTensors;
-  // status = session->Run(feedDict, outputOps, {}, &outputTensors);
+  // Actually run the image through the model.
+  std::vector<Tensor> output_tensors;
+  Status run_status = session->Run({{input_layer, input_tensor}},
+                                   {output_layer}, {}, &output_tensors);
+  if (!run_status.ok()) {
+    std::cerr << "Running model failed: " << run_status;
+    return -1;
+  }
+  const Tensor& output_tensor = output_tensors[0];
+  std::cout << "Ran session. " << std::endl;
+
+  TTypes<float, 4>::ConstTensor out_image = output_tensor.tensor<float, 4>();
+  SaveTensorAsImage(out_image, "out.png");
 
   return 0;
 }
