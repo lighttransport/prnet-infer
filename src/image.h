@@ -7,6 +7,8 @@
 #include <vector>
 #include <functional>
 
+namespace prnet {
+
 const static uint32_t DEFAULT_HW_CONCURRENCY =
   std::max(1U, std::thread::hardware_concurrency());
 
@@ -40,5 +42,7 @@ private:
 };
 
 #include "image_impl.h"
+
+} // namsepace prnet
 
 #endif /* end of include guard */

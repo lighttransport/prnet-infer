@@ -4,6 +4,7 @@ project(PRNetInfer)
 
 # [Build options] -------------------------------------------------------
 option(WITH_DLIB "Build with dlib support" OFF)
+option(WITH_GUI "Build with GUI support(for result visualization)" OFF)
 # -----------------------------------------------------------------------
 
 set(CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake" ${CMAKE_MODULE_PATH})
@@ -18,6 +19,29 @@ find_package(Threads)
 if (WITH_DLIB)
   add_definitions("-DUSE_DLIB=1")
 endif (WITH_DLIB)
+
+if (WITH_GUI)
+  add_definitions("-DUSE_GUI=1")
+
+  set (PRNET_INFER_GUI_SOURCE
+      ${CMAKE_SOURCE_DIR}/src/ui.cc
+      ${CMAKE_SOURCE_DIR}/src/gui/render.cc
+      ${CMAKE_SOURCE_DIR}/src/gui/trackball.cc
+      ${CMAKE_SOURCE_DIR}/src/gui/matrix.cc
+      ${CMAKE_SOURCE_DIR}/src/gui/imgui/imgui.cpp
+      ${CMAKE_SOURCE_DIR}/src/gui/imgui/imgui_dock.cpp
+      ${CMAKE_SOURCE_DIR}/src/gui/imgui/imgui_draw.cpp
+      ${CMAKE_SOURCE_DIR}/src/gui/imgui/imgui_impl_glfw_gl2.cpp
+      )
+
+  set(GLFW_BUILD_EXAMPLES OFF CACHE INTERNAL "" FORCE)
+  set(GLFW_BUILD_TESTS OFF CACHE INTERNAL "" FORCE)
+  set(GLFW_BUILD_DOCS OFF CACHE INTERNAL "" FORCE)
+  set(GLFW_INSTALL OFF CACHE INTERNAL "" FORCE)
+  add_subdirectory(${CMAKE_SOURCE_DIR}/src/gui/glfw)
+  include_directories(${CMAKE_SOURCE_DIR}/src/gui/glfw/include)
+
+endif (WITH_GUI)
 
 # Add custom build type DebugOpt
 message("* Adding build types...")
@@ -76,6 +100,7 @@ include_directories(
 set (CORE_SOURCE
     ${CMAKE_SOURCE_DIR}/src/main.cc
     ${CMAKE_SOURCE_DIR}/src/tf_predictor.cc
+    ${CMAKE_SOURCE_DIR}/src/face-data.cc
     )
 
 link_directories(
@@ -84,6 +109,7 @@ link_directories(
 
 add_executable( prnet
     ${CORE_SOURCE}
+    ${PRNET_INFER_GUI_SOURCE}
     )
 
 target_include_directories(prnet
@@ -101,8 +127,33 @@ target_include_directories(prnet
     PUBLIC ${CMAKE_SOURCE_DIR}/src
 )
 
+if (WITH_GUI)
+  set(PRNET_INFER_EXT_LIBS glfw)
+
+  # Required GL libraries on various platforms
+  if (WIN32)
+    list(APPEND PRNET_INFER_EXT_LIBS opengl32)
+  elseif (APPLE)
+    find_library(cocoa_library Cocoa)
+    find_library(opengl_library OpenGL)
+    find_library(corevideo_library CoreVideo)
+    find_library(iokit_library IOKit)
+    list(APPEND PRNET_INFER_EXT_LIBS ${cocoa_library} ${opengl_library} ${corevideo_library} ${iokit_library})
+    #list(APPEND LIBNANOGUI_EXTRA_SOURCE src/darwin.mm)
+  elseif(CMAKE_SYSTEM MATCHES "Linux" OR CMAKE_SYSTEM_NAME MATCHES "BSD")
+    list(APPEND PRNET_INFER_EXT_LIBS GL drm Xxf86vm Xrandr Xinerama Xcursor Xi X11 pthread )
+    #if (NOT CMAKE_SYSTEM_NAME MATCHES "OpenBSD")
+    #  list(APPEND PRNET_INFER_EXT_LIBS rt)
+    #endif()
+    #if(CMAKE_SYSTEM MATCHES "Linux")
+    #  list(APPEND PRNET_INFER_EXT_LIBS dl)
+    #endif()
+  endif()
+endif (WITH_GUI)
+
 target_link_libraries( prnet
     tensorflow_cc
+    ${PRNET_INFER_EXT_LIBS}
     ${CMAKE_THREAD_LIBS_INIT}
     ${CMAKE_DL_LIBS}
     )

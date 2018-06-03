@@ -14,5 +14,6 @@ cmake -DTENSORFLOW_DIR=${TF_DIR} \
       -DTENSORFLOW_EXTERNAL_DIR=${TF_EXTERNAL_DIR} \
       -DTENSORFLOW_BUILD_DIR=${TF_BUILD_DIR} \
       -DSANITIZE_ADDRESS=On \
+      -DWITH_GUI=On \
       -Bbuild \
       -H.

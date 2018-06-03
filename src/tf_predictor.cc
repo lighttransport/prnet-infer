@@ -30,6 +30,8 @@
 
 using namespace tensorflow;
 
+namespace prnet {
+
 namespace {
 
 Status ReadEntireFile(tensorflow::Env* env, const string& filename,
@@ -152,3 +154,5 @@ bool TensorflowPredictor::predict(const Image<float>& inp_img,
                                   Image<float>& out_img) {
   return impl->predict(inp_img, out_img);
 }
+
+} // namespace prnet

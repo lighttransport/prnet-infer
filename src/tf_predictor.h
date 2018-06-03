@@ -5,6 +5,8 @@
 
 #include "image.h"
 
+namespace prnet {
+
 class TensorflowPredictor {
 public:
   TensorflowPredictor();
@@ -18,6 +20,8 @@ private:
   class Impl;
   std::unique_ptr<Impl> impl;
 };
+
+} // namespace prnet
 
 
 #endif /* end of include guard */
