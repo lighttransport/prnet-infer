@@ -317,8 +317,10 @@ bool Renderer::Render(RenderBuffer *buffer,
           float u1 = pcg32_random(&rng);
 
           float3 dir;
+          //dir = corner + (float(x) + u0) * u +
+          //      (float(config.height - y - 1) + u1) * v;
           dir = corner + (float(x) + u0) * u +
-                (float(config.height - y - 1) + u1) * v;
+                (float(y) + u1) * v;
           dir = vnormalize(dir);
           ray.dir[0] = dir[0];
           ray.dir[1] = dir[1];
@@ -333,6 +335,7 @@ bool Renderer::Render(RenderBuffer *buffer,
           nanort::TriangleIntersection<float> isect;
           bool hit = gAccel.Traverse(ray, triangle_intersector, &isect);
           if (hit) {
+
             float3 p;
             p[0] =
                 ray.org[0] + isect.t * ray.dir[0];

@@ -29,7 +29,7 @@ if (WITH_GUI)
       ${CMAKE_SOURCE_DIR}/src/gui/trackball.cc
       ${CMAKE_SOURCE_DIR}/src/gui/matrix.cc
       ${CMAKE_SOURCE_DIR}/src/gui/imgui/imgui.cpp
-      ${CMAKE_SOURCE_DIR}/src/gui/imgui/imgui_dock.cpp
+      #${CMAKE_SOURCE_DIR}/src/gui/imgui/imgui_dock.cpp
       ${CMAKE_SOURCE_DIR}/src/gui/imgui/imgui_draw.cpp
       ${CMAKE_SOURCE_DIR}/src/gui/imgui/imgui_impl_glfw_gl2.cpp
       )
@@ -86,8 +86,8 @@ IF(NOT CMAKE_BUILD_TYPE)
 ENDIF(NOT CMAKE_BUILD_TYPE)
 message("* Current build type is : ${CMAKE_BUILD_TYPE}")
 
-# C++14
-set (CMAKE_CXX_STANDARD 14)
+# C++11
+set (CMAKE_CXX_STANDARD 11)
 
 # PIC
 set (CMAKE_POSITION_INDEPENDENT_CODE ON)

@@ -19,6 +19,14 @@ struct RenderBuffer {
   std::vector<float> depth;  // 4 
   std::vector<float> position;  // 4 
   std::vector<float> texcoords; // 4
+
+  void resize(int width, int height) {
+    rgba.resize(width * height * 4);
+    normal.resize(width * height * 4);
+    depth.resize(width * height * 4);
+    position.resize(width * height * 4);
+    texcoords.resize(width * height * 4);
+  }
 };
 
 } // namespace example
