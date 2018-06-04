@@ -8,6 +8,8 @@
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "stb_image_write.h"
 
+#include "cxxopts.hpp"
+
 #ifdef __clang__
 #pragma clang diagnostic pop
 #endif
@@ -144,6 +146,28 @@ bool SaveAsWObj(const std::string &filename, prnet::Mesh &mesh)
 
 int main(int argc, char** argv) {
   
+  cxxopts::Options options("prnet-infer", "PRNet infererence in C++");
+  options.add_options()
+    ("i,image", "Input image file", cxxopts::value<std::string>())
+    ;
+
+  auto result = options.parse(argc, argv);
+
+  if (!result.count("image")) {
+    std::cerr << "Please specify input image with -i or --image option." << std::endl;
+    return -1;
+  }
+
+  std::string image_filename = result["image"].as<std::string>();
+
+  // Load image
+  std::cout << "Loading image \"" << image_filename << "\"" << std::endl;
+
+  Image<float> inp_img;
+  if (!LoadImage(image_filename, inp_img)) {
+    return -1;
+  }
+
   FaceData face_data;
 
   // Load face data
@@ -151,11 +175,6 @@ int main(int argc, char** argv) {
     return -1;
   }
 
-  // Load image
-  Image<float> inp_img;
-  if (!LoadImage("../cropped_img.jpg", inp_img)) {
-    return -1;
-  }
 
   // Predict
   TensorflowPredictor tf_predictor;
