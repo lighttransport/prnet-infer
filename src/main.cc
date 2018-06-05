@@ -75,6 +75,51 @@ bool SaveImage(const std::string& filename, Image<float>& image) {
 
 // --------------------------------
 
+inline int clamp(int f, int fmin, int fmax)
+{
+  return std::max(std::min(fmax, f), fmin);
+}
+
+void CropImage(
+  const Image<float> &in_img,
+  int xs, int xe,
+  int ys, int ye,
+  Image<float> *out_img)
+{
+  
+  size_t width = in_img.getWidth();
+  size_t height = in_img.getHeight();
+  size_t channels = in_img.getChannels();
+  size_t stride = width * channels;
+
+  out_img->create(width, height, channels);
+
+  if ((xs == xe) || (ys == ye)) {
+    return;    
+  }
+
+  float xstep = 1.0f / (xe - xs);
+  float ystep = 1.0f / (ye - ys);
+  float *ret;
+
+  const float *src = in_img.getData();
+  float *dst = out_img->getData();
+
+  // TODO(LTE): biliner interpolation.
+  for (size_t y = 0; y < height; y++) {
+    int py = ys + y * ystep;
+    for (size_t x = 0; x < width; x++) {
+      int px = xs + x * xstep;
+
+      for (size_t c = 0; c < channels; c++) {
+        float val = src[channels * (py * width + px) + c];
+        dst[channels * (y * width + x) + c] = val;
+      }
+    }
+  }
+  
+}
+
 // Convert 3D position map(Image) to mesh using FaceData.
 bool ConvertToMesh(const Image<float> &image, const FaceData &face_data, Mesh *mesh) {
   if (image.getWidth() != 256) {
