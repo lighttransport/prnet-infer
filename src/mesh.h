@@ -16,7 +16,8 @@ class Mesh
     ~Mesh() {}
 
   std::vector<float> vertices;
-  std::vector<uint32_t> faces;
+  std::vector<uint32_t> faces;  // 3 * # of faces
+  std::vector<float> uvs; // per vertex uv
 
 }; 
 

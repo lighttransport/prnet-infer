@@ -6,7 +6,7 @@
 
 namespace prnet {
 
-bool RunUI(const Mesh &mesh, const Image<float> &image);
+bool RunUI(const Mesh &mesh, const Image<float> &input_image);
 
 };
 

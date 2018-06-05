@@ -16,7 +16,7 @@
 namespace prnet {
 
 struct UIParameters {
-  float showDepthRange[2] = {0.0f, 100.0f};
+  float showDepthRange[2] = {0.0f, 3.0f};
   bool showDepthPeseudoColor = false;
   int showBufferMode = example::SHOW_BUFFER_COLOR;
 };
@@ -163,7 +163,11 @@ void Display(int width, int height, int buffer_mode, const example::RenderBuffer
     }
   } else if (buffer_mode == example::SHOW_BUFFER_TEXCOORD) {
     for (size_t i = 0; i < buf.size(); i++) {
-      buf[i] = buffer.texcoords[i];
+      buf[i] = buffer.texcoord[i];
+    }
+  } else if (buffer_mode == example::SHOW_BUFFER_DIFFUSE) {
+    for (size_t i = 0; i < buf.size(); i++) {
+      buf[i] = buffer.diffuse[i];
     }
   }
 
@@ -174,6 +178,7 @@ void Display(int width, int height, int buffer_mode, const example::RenderBuffer
 }
  
 static void HandleUserInput(GLFWwindow *window,
+                            const double view_width, const double view_height,
                             double *prev_mouse_x, double *prev_mouse_y) {
 
   // Handle mouse input
@@ -215,10 +220,13 @@ static void HandleUserInput(GLFWwindow *window,
     } else {
       // No key for rotation
 
-      trackball(gPrevQuat, (2.f * (*prev_mouse_x) - width) / width,
-                (height - 2.f * (*prev_mouse_y)) / height,
-                (2.f * mouse_x - width) / width,
-                (height - 2.f * mouse_y) / height);
+      // Assume render view is located in lower-left.
+      double offset_y = height - view_height;
+
+      trackball(gPrevQuat, (2.f * (*prev_mouse_x) - view_width) / view_width,
+                (height - 2.f * ((*prev_mouse_y) - offset_y)) / view_height,
+                (2.f * mouse_x - view_width) / view_width,
+                (height - 2.f * (mouse_y - offset_y)) / view_height);
       add_quats(gPrevQuat, gCurrQuat, gCurrQuat);
 
       RequestRender();
@@ -233,7 +241,7 @@ static void HandleUserInput(GLFWwindow *window,
 }
 
 
-bool RunUI(const Mesh &mesh, const Image<float> &image)
+bool RunUI(const Mesh &mesh, const Image<float> &input_image)
 {
   // Setup window
   glfwSetErrorCallback(error_callback);
@@ -259,9 +267,9 @@ bool RunUI(const Mesh &mesh, const Image<float> &image)
   ImGui::StyleColorsDark();
 
   // Setup raytrace renderer;
-  gRenderConfig.eye[0] = 0.5f;
-  gRenderConfig.eye[1] = 0.5f;
-  gRenderConfig.eye[2] = 2.5f;
+  gRenderConfig.eye[0] = 0.0f;
+  gRenderConfig.eye[1] = 0.0f;
+  gRenderConfig.eye[2] = 2.0f;
 
   gRenderConfig.look_at[0] = 0.0f;
   gRenderConfig.look_at[1] = 0.0f;
@@ -282,6 +290,7 @@ bool RunUI(const Mesh &mesh, const Image<float> &image)
 
   // Setup renderer.
   gRenderer.SetMesh(mesh);
+  gRenderer.SetImage(input_image);
   gRenderer.BuildBVH();
 
   // Launch render thread
@@ -308,9 +317,9 @@ bool RunUI(const Mesh &mesh, const Image<float> &image)
     // space to reset rotation
     if (glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_PRESS) {
       trackball(gCurrQuat, 0.0f, 0.0f, 0.0f, 0.0f);
-      gRenderConfig.eye[0] = 0.5f;
-      gRenderConfig.eye[1] = 0.5f;
-      gRenderConfig.eye[2] = 2.5f;
+      gRenderConfig.eye[0] = 0.0f;
+      gRenderConfig.eye[1] = 0.0f;
+      gRenderConfig.eye[2] = 2.0f;
       gRenderConfig.look_at[0] = 0.0f;
       gRenderConfig.look_at[1] = 0.0f;
       gRenderConfig.look_at[2] = 0.0f;
@@ -322,7 +331,28 @@ bool RunUI(const Mesh &mesh, const Image<float> &image)
     }
 
     // Handle user's mouse and key input
-    HandleUserInput(window, &mouse_x, &mouse_y);
+    HandleUserInput(window, double(gRenderConfig.width), double(gRenderConfig.height), &mouse_x, &mouse_y);
+
+    // ImGui
+    ImGui::Begin("UI");
+    {
+      ImGui::RadioButton("color", &(gUIParam.showBufferMode), example::SHOW_BUFFER_COLOR);
+      ImGui::SameLine();
+      ImGui::RadioButton("normal", &(gUIParam.showBufferMode), example::SHOW_BUFFER_NORMAL);
+      ImGui::SameLine();
+      ImGui::RadioButton("position", &(gUIParam.showBufferMode), example::SHOW_BUFFER_POSITION);
+      ImGui::SameLine();
+      ImGui::RadioButton("depth", &(gUIParam.showBufferMode), example::SHOW_BUFFER_DEPTH);
+      ImGui::SameLine();
+      ImGui::RadioButton("texcoord", &(gUIParam.showBufferMode), example::SHOW_BUFFER_TEXCOORD);
+      ImGui::SameLine();
+      ImGui::RadioButton("diffuse(texture)", &(gUIParam.showBufferMode), example::SHOW_BUFFER_DIFFUSE);
+
+      ImGui::InputFloat2("show depth range", gUIParam.showDepthRange);
+      ImGui::Checkbox("show depth pesudo color", &gUIParam.showDepthPeseudoColor);
+
+    }
+    ImGui::End();
 
     // Display rendered image.
     int display_w, display_h;

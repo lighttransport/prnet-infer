@@ -11,6 +11,7 @@ enum ShowBufferMode {
   SHOW_BUFFER_DEPTH,
   SHOW_BUFFER_POSITION,
   SHOW_BUFFER_TEXCOORD,
+  SHOW_BUFFER_DIFFUSE,
 };
 
 struct RenderBuffer {
@@ -18,14 +19,16 @@ struct RenderBuffer {
   std::vector<float> normal;  // 4 
   std::vector<float> depth;  // 4 
   std::vector<float> position;  // 4 
-  std::vector<float> texcoords; // 4
+  std::vector<float> texcoord; // 4
+  std::vector<float> diffuse; // 4
 
   void resize(int width, int height) {
     rgba.resize(width * height * 4);
     normal.resize(width * height * 4);
     depth.resize(width * height * 4);
     position.resize(width * height * 4);
-    texcoords.resize(width * height * 4);
+    texcoord.resize(width * height * 4);
+    diffuse.resize(width * height * 4);
   }
 };
 

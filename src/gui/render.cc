@@ -22,7 +22,6 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 */
 
-
 #ifdef _MSC_VER
 #pragma warning(disable : 4018)
 #pragma warning(disable : 4244)
@@ -34,16 +33,16 @@ THE SOFTWARE.
 
 #include "render.h"
 
+#include <atomic>
 #include <chrono>  // C++11
 #include <sstream>
 #include <thread>  // C++11
 #include <vector>
-#include <atomic>
 
 #include <iostream>
 
-#include "nanort.h"
 #include "matrix.h"
+#include "nanort.h"
 
 #include "trackball.h"
 
@@ -73,7 +72,8 @@ float pcg32_random(pcg32_state_t* rng) {
   rng->state = oldstate * 6364136223846793005ULL + rng->inc;
   unsigned int xorshifted = ((oldstate >> 18u) ^ oldstate) >> 27u;
   unsigned int rot = oldstate >> 59u;
-  unsigned int ret = (xorshifted >> rot) | (xorshifted << ((-static_cast<int>(rot)) & 31));
+  unsigned int ret =
+      (xorshifted >> rot) | (xorshifted << ((-static_cast<int>(rot)) & 31));
 
   return (float)((double)ret / (double)4294967296.0);
 }
@@ -102,6 +102,24 @@ inline void CalcNormal(float3& N, float3 v0, float3 v1, float3 v2) {
 
   N = vcross(v20, v10);
   N = vnormalize(N);
+}
+
+// Simple texture lookup without filtering.
+void FetchTexture(const prnet::Image<float>& image, float u, float v,
+                  float* col) {
+  if (image.getWidth() == 0) {
+    return;
+  }
+
+  int tx = std::max(
+      0, std::min(int(image.getWidth()) - 1, int(u * image.getWidth())));
+  int ty = std::max(
+      0, std::min(int(image.getHeight()) - 1, int(v * image.getHeight())));
+  int idx_offset = (ty * image.getWidth() + tx) * image.getChannels();
+
+  col[0] = image.getData()[idx_offset + 0];
+  col[1] = image.getData()[idx_offset + 1];
+  col[2] = image.getData()[idx_offset + 2];
 }
 
 void BuildCameraFrame(float3* origin, float3* corner, float3* u, float3* v,
@@ -235,15 +253,15 @@ bool Renderer::BuildBVH() {
 
   auto t_start = std::chrono::system_clock::now();
 
-  nanort::TriangleMesh<float> triangle_mesh(mesh_.vertices.data(),
-                                            mesh_.faces.data(), sizeof(float) * 3);
-  nanort::TriangleSAHPred<float> triangle_pred(mesh_.vertices.data(),
-                                               mesh_.faces.data(), sizeof(float) * 3);
+  nanort::TriangleMesh<float> triangle_mesh(
+      mesh_.vertices.data(), mesh_.faces.data(), sizeof(float) * 3);
+  nanort::TriangleSAHPred<float> triangle_pred(
+      mesh_.vertices.data(), mesh_.faces.data(), sizeof(float) * 3);
 
   printf("num_triangles = %lu\n", mesh_.faces.size() / 3);
 
-  bool ret = gAccel.Build(mesh_.faces.size() / 3, triangle_mesh,
-                          triangle_pred, build_options);
+  bool ret = gAccel.Build(mesh_.faces.size() / 3, triangle_mesh, triangle_pred,
+                          build_options);
   assert(ret);
 
   auto t_end = std::chrono::system_clock::now();
@@ -265,9 +283,8 @@ bool Renderer::BuildBVH() {
   return true;
 }
 
-bool Renderer::Render(RenderBuffer *buffer,
-                      float quat[4], const RenderConfig& config)
-{
+bool Renderer::Render(RenderBuffer* buffer, float quat[4],
+                      const RenderConfig& config) {
   if (!gAccel.IsValid()) {
     return false;
   }
@@ -317,10 +334,9 @@ bool Renderer::Render(RenderBuffer *buffer,
           float u1 = pcg32_random(&rng);
 
           float3 dir;
-          //dir = corner + (float(x) + u0) * u +
+          // dir = corner + (float(x) + u0) * u +
           //      (float(config.height - y - 1) + u1) * v;
-          dir = corner + (float(x) + u0) * u +
-                (float(y) + u1) * v;
+          dir = corner + (float(x) + u0) * u + (float(y) + u1) * v;
           dir = vnormalize(dir);
           ray.dir[0] = dir[0];
           ray.dir[1] = dir[1];
@@ -330,19 +346,44 @@ bool Renderer::Render(RenderBuffer *buffer,
           ray.min_t = 0.0f;
           ray.max_t = kFar;
 
+          // clear pixel
+          {
+            buffer->rgba[4 * (y * config.width + x) + 0] = 0.0f;
+            buffer->rgba[4 * (y * config.width + x) + 1] = 0.0f;
+            buffer->rgba[4 * (y * config.width + x) + 2] = 0.0f;
+            buffer->rgba[4 * (y * config.width + x) + 3] = 0.0f;
+
+            buffer->normal[4 * (y * config.width + x) + 0] = 0.0f;
+            buffer->normal[4 * (y * config.width + x) + 1] = 0.0f;
+            buffer->normal[4 * (y * config.width + x) + 2] = 0.0f;
+            buffer->normal[4 * (y * config.width + x) + 3] = 0.0f;
+            buffer->position[4 * (y * config.width + x) + 0] = 0.0f;
+            buffer->position[4 * (y * config.width + x) + 1] = 0.0f;
+            buffer->position[4 * (y * config.width + x) + 2] = 0.0f;
+            buffer->position[4 * (y * config.width + x) + 3] = 0.0f;
+            buffer->depth[4 * (y * config.width + x) + 0] = 0.0f;
+            buffer->depth[4 * (y * config.width + x) + 1] = 0.0f;
+            buffer->depth[4 * (y * config.width + x) + 2] = 0.0f;
+            buffer->depth[4 * (y * config.width + x) + 3] = 0.0f;
+            buffer->texcoord[4 * (y * config.width + x) + 0] = 0.0f;
+            buffer->texcoord[4 * (y * config.width + x) + 1] = 0.0f;
+            buffer->texcoord[4 * (y * config.width + x) + 2] = 0.0f;
+            buffer->texcoord[4 * (y * config.width + x) + 3] = 0.0f;
+            buffer->diffuse[4 * (y * config.width + x) + 0] = 0.0f;
+            buffer->diffuse[4 * (y * config.width + x) + 1] = 0.0f;
+            buffer->diffuse[4 * (y * config.width + x) + 2] = 0.0f;
+            buffer->diffuse[4 * (y * config.width + x) + 3] = 0.0f;
+          }
+
           nanort::TriangleIntersector<> triangle_intersector(
               mesh_.vertices.data(), mesh_.faces.data(), sizeof(float) * 3);
           nanort::TriangleIntersection<float> isect;
           bool hit = gAccel.Traverse(ray, triangle_intersector, &isect);
           if (hit) {
-
             float3 p;
-            p[0] =
-                ray.org[0] + isect.t * ray.dir[0];
-            p[1] =
-                ray.org[1] + isect.t * ray.dir[1];
-            p[2] =
-                ray.org[2] + isect.t * ray.dir[2];
+            p[0] = ray.org[0] + isect.t * ray.dir[0];
+            p[1] = ray.org[1] + isect.t * ray.dir[1];
+            p[2] = ray.org[2] + isect.t * ray.dir[2];
 
             buffer->position[4 * (y * config.width + x) + 0] = p.x();
             buffer->position[4 * (y * config.width + x) + 1] = p.y();
@@ -371,87 +412,58 @@ bool Renderer::Render(RenderBuffer *buffer,
               CalcNormal(N, v0, v1, v2);
             }
 
-            buffer->normal[4 * (y * config.width + x) + 0] =
-                0.5f * N[0] + 0.5f;
-            buffer->normal[4 * (y * config.width + x) + 1] =
-                0.5f * N[1] + 0.5f;
-            buffer->normal[4 * (y * config.width + x) + 2] =
-                0.5f * N[2] + 0.5f;
+            buffer->normal[4 * (y * config.width + x) + 0] = 0.5f * N[0] + 0.5f;
+            buffer->normal[4 * (y * config.width + x) + 1] = 0.5f * N[1] + 0.5f;
+            buffer->normal[4 * (y * config.width + x) + 2] = 0.5f * N[2] + 0.5f;
             buffer->normal[4 * (y * config.width + x) + 3] = 1.0f;
 
-            buffer->depth[4 * (y * config.width + x) + 0] =
-                isect.t;
-            buffer->depth[4 * (y * config.width + x) + 1] =
-                isect.t;
-            buffer->depth[4 * (y * config.width + x) + 2] =
-                isect.t;
+            buffer->depth[4 * (y * config.width + x) + 0] = isect.t;
+            buffer->depth[4 * (y * config.width + x) + 1] = isect.t;
+            buffer->depth[4 * (y * config.width + x) + 2] = isect.t;
             buffer->depth[4 * (y * config.width + x) + 3] = 1.0f;
 
-#if 0 // TODO(LTE)
             float3 UV;
-            if (mesh_.facevarying_uvs.size() > 0) {
+            if (mesh_.uvs.size() > 0) {
               float3 uv0, uv1, uv2;
-              uv0[0] = mesh_.facevarying_uvs[6 * prim_id + 0];
-              uv0[1] = mesh_.facevarying_uvs[6 * prim_id + 1];
-              uv1[0] = mesh_.facevarying_uvs[6 * prim_id + 2];
-              uv1[1] = mesh_.facevarying_uvs[6 * prim_id + 3];
-              uv2[0] = mesh_.facevarying_uvs[6 * prim_id + 4];
-              uv2[1] = mesh_.facevarying_uvs[6 * prim_id + 5];
+              uint32_t v0, v1, v2;
+              v0 = mesh_.faces[3 * prim_id + 0];
+              v1 = mesh_.faces[3 * prim_id + 1];
+              v2 = mesh_.faces[3 * prim_id + 2];
 
-              UV = Lerp3(uv0, uv1, uv2, isect.u,
-                         isect.v);
+              uv0[0] = mesh_.uvs[2 * v0 + 0];
+              uv0[1] = mesh_.uvs[2 * v0 + 1];
+              uv1[0] = mesh_.uvs[2 * v1 + 0];
+              uv1[1] = mesh_.uvs[2 * v1 + 1];
+              uv2[0] = mesh_.uvs[2 * v2 + 0];
+              uv2[1] = mesh_.uvs[2 * v2 + 1];
+
+              UV = Lerp3(uv0, uv1, uv2, isect.u, isect.v);
 
               buffer->texcoord[4 * (y * config.width + x) + 0] = UV[0];
               buffer->texcoord[4 * (y * config.width + x) + 1] = UV[1];
+              buffer->texcoord[4 * (y * config.width + x) + 2] = 0.0f;
+              buffer->texcoord[4 * (y * config.width + x) + 3] = 1.0f;
             }
-#endif
+
+            // Fetch texture
+            float tex_col[3];
+            FetchTexture(image_, UV[0], UV[1], tex_col);
+
+            // Use texture as diffuse color.
+            buffer->diffuse[4 * (y * config.width + x) + 0] = tex_col[0];
+            buffer->diffuse[4 * (y * config.width + x) + 1] = tex_col[1];
+            buffer->diffuse[4 * (y * config.width + x) + 2] = tex_col[2];
+            buffer->diffuse[4 * (y * config.width + x) + 0] = 1.0f;
 
             // Simple shading
             float NdotV = fabsf(vdot(N, dir));
 
-            if (config.pass == 0) {
-              buffer->rgba[4 * (y * config.width + x) + 0] = NdotV;
-              buffer->rgba[4 * (y * config.width + x) + 1] = NdotV;
-              buffer->rgba[4 * (y * config.width + x) + 2] = NdotV;
-              buffer->rgba[4 * (y * config.width + x) + 3] = 1.0f;
-            } else {  // additive.
-              buffer->rgba[4 * (y * config.width + x) + 0] += NdotV;
-              buffer->rgba[4 * (y * config.width + x) + 1] += NdotV;
-              buffer->rgba[4 * (y * config.width + x) + 2] += NdotV;
-              buffer->rgba[4 * (y * config.width + x) + 3] += 1.0f;
-            }
-
-          } else {
-            {
-              if (config.pass == 0) {
-                // clear pixel
-                buffer->rgba[4 * (y * config.width + x) + 0] = 0.0f;
-                buffer->rgba[4 * (y * config.width + x) + 1] = 0.0f;
-                buffer->rgba[4 * (y * config.width + x) + 2] = 0.0f;
-                buffer->rgba[4 * (y * config.width + x) + 3] = 0.0f;
-              }
-
-              // No super sampling
-              buffer->normal[4 * (y * config.width + x) + 0] = 0.0f;
-              buffer->normal[4 * (y * config.width + x) + 1] = 0.0f;
-              buffer->normal[4 * (y * config.width + x) + 2] = 0.0f;
-              buffer->normal[4 * (y * config.width + x) + 3] = 0.0f;
-              buffer->position[4 * (y * config.width + x) + 0] = 0.0f;
-              buffer->position[4 * (y * config.width + x) + 1] = 0.0f;
-              buffer->position[4 * (y * config.width + x) + 2] = 0.0f;
-              buffer->position[4 * (y * config.width + x) + 3] = 0.0f;
-              buffer->depth[4 * (y * config.width + x) + 0] = 0.0f;
-              buffer->depth[4 * (y * config.width + x) + 1] = 0.0f;
-              buffer->depth[4 * (y * config.width + x) + 2] = 0.0f;
-              buffer->depth[4 * (y * config.width + x) + 3] = 0.0f;
-              //buffer->texcoord[4 * (y * config.width + x) + 0] = 0.0f;
-              //buffer->texcoord[4 * (y * config.width + x) + 1] = 0.0f;
-              //buffer->texcoord[4 * (y * config.width + x) + 2] = 0.0f;
-              //buffer->texcoord[4 * (y * config.width + x) + 3] = 0.0f;
-            }
+            buffer->rgba[4 * (y * config.width + x) + 0] = NdotV * tex_col[0];
+            buffer->rgba[4 * (y * config.width + x) + 1] = NdotV * tex_col[1];
+            buffer->rgba[4 * (y * config.width + x) + 2] = NdotV * tex_col[2];
+            buffer->rgba[4 * (y * config.width + x) + 3] = 1.0f;
           }
         }
-
       }
     }));
   }

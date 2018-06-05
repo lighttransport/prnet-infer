@@ -34,7 +34,7 @@ bool LoadImage(const std::string& filename, Image<float>& image) {
   // Load image
   int width, height, channels;
   unsigned char *data =
-    stbi_load(filename.c_str(), &width, &height, &channels, 0);
+    stbi_load(filename.c_str(), &width, &height, &channels, /* required channels */3);
   if (!data) {
     std::cerr << "Failed to load image (" << filename << ")" << std::endl;
     return false;
@@ -44,6 +44,8 @@ bool LoadImage(const std::string& filename, Image<float>& image) {
   image.create(width, height, channels);
   image.foreach([&](int x, int y, int c, float &v) {
       v = static_cast<float>(data[(y * width + x) * channels + c]) / 255.f;
+      // TODO(LTE): Do we need degamma?
+      //v = std::pow(v, 2.2f);
   });
 
   // Free
@@ -90,31 +92,78 @@ bool ConvertToMesh(const Image<float> &image, const FaceData &face_data, Mesh *m
     return false;
   }
 
+  float bmin[3];
+  float bmax[3];
+
   // Look up vertex position from 3D position map(256x256x3)
   mesh->vertices.clear();
+  mesh->uvs.clear();
   for (size_t i = 0; i < face_data.face_indices.size(); i++) {
 
     size_t idx = face_data.face_indices[i];
 
-    const float x = image.getData()[3 * idx + 0];
-    const float y = image.getData()[3 * idx + 1];
-    const float z = image.getData()[3 * idx + 2];
+    int px = idx % image.getWidth();
+    int py = idx / image.getHeight();
+
+    float x = image.getData()[3 * (py * image.getWidth() + px) + 0];
+    float y = image.getData()[3 * (py * image.getWidth() + px) + 1];
+    float z = image.getData()[3 * (py * image.getWidth() + px) + 2];
 
     mesh->vertices.push_back(x);
     mesh->vertices.push_back(y);
     mesh->vertices.push_back(z);
+
+    if (i == 0) {
+      bmin[0] = bmax[0] = x;
+      bmin[1] = bmax[1] = y;
+      bmin[2] = bmax[2] = z;
+    } else {
+      bmin[0] = std::min(bmin[0], x);
+      bmin[1] = std::min(bmin[1], y);
+      bmin[2] = std::min(bmin[2], z);
+
+      bmax[0] = std::max(bmax[0], x);
+      bmax[1] = std::max(bmax[1], y);
+      bmax[2] = std::max(bmax[2], z);
+    }
+
+    // compute and normalize uv
+    // Assume position is in [0, 1]^3, so uv = xy
+    float u = x; 
+    float v = y; 
+
+    mesh->uvs.push_back(u);
+    mesh->uvs.push_back(v);
   }
 
+  std::cout << "bmin " << bmin[0] << ", " << bmin[1] << ", " << bmin[2] << std::endl;
+  std::cout << "bmax " << bmax[0] << ", " << bmax[1] << ", " << bmax[2] << std::endl;
+
+#if 0
+  // Centerize vertex position.
+  {
+    float bsize[3];
+    bsize[0] = bmax[0] - bmin[0];
+    bsize[1] = bmax[1] - bmin[1];
+    bsize[2] = bmax[2] - bmin[2];
+    for (size_t i = 0 ; i < mesh->vertices.size() / 3; i++) {
+      mesh->vertices[3 * i + 0] -= (bmin[0] + 0.5f * bsize[0]);
+      mesh->vertices[3 * i + 1] -= (bmin[1] + 0.5f * bsize[1]);
+      mesh->vertices[3 * i + 2] -= (bmin[2] + 0.5f * bsize[2]);
+    }
+  }
+#endif
+
   for (size_t i = 0; i < face_data.triangles.size(); i++) {
-    // Triangle index starts with 1, so subtract -1
-    uint32_t idx = face_data.triangles[i] - 1;
+    // It looks triangle index starts with 1, but accepts it.
+    uint32_t idx = face_data.triangles[i];
     if (idx >= (mesh->vertices.size() / 3)) {
       std::cerr << "??? : invalid triangle index. " << idx << " is greater or equal to " << (mesh->vertices.size() / 3) << std::endl;
       exit(-1);
     }
     mesh->faces.push_back(idx);
   }
-  
+
   return true;
 }
 
@@ -128,16 +177,23 @@ bool SaveAsWObj(const std::string &filename, prnet::Mesh &mesh)
   }
 
   for (size_t i = 0; i < mesh.vertices.size() / 3; i++) {
-    ofs << "v " << mesh.vertices[3 * i + 0] << " " << mesh.vertices[3 * i + 1] << " " << mesh.vertices[3 * i + 2] << std::endl;
+    ofs << "v " << 255.0f * mesh.vertices[3 * i + 0] << " " << 255.0f * mesh.vertices[3 * i + 1] << " " << 255.0f * mesh.vertices[3 * i + 2] << std::endl;
+  }
+
+  for (size_t i = 0; i < mesh.uvs.size() / 2; i++) {
+    ofs << "vt " << mesh.uvs[2 * i + 0] << " " << mesh.uvs[2 * i + 1] << std::endl;
   }
 
   for (size_t i = 0; i < mesh.faces.size() / 3; i++) {
-    // For .obj, face index starts with 1.
+    // For .obj, face index starts with 1, so add +1.
     int f0 = mesh.faces[3 * i + 0] + 1; 
     int f1 = mesh.faces[3 * i + 1] + 1; 
     int f2 = mesh.faces[3 * i + 2] + 1; 
-    ofs << "f " << f0 << " " << f1 << " " << f2 << std::endl;
+
+    // Assume # of v == # of vt.
+    ofs << "f " << f0 << "/" << f0 << " " << f1 << "/" << f1 << " " << f2 << "/" << f2 << std::endl;
   }
+
 
   return true;
 }
@@ -149,6 +205,8 @@ int main(int argc, char** argv) {
   cxxopts::Options options("prnet-infer", "PRNet infererence in C++");
   options.add_options()
     ("i,image", "Input image file", cxxopts::value<std::string>())
+    ("g,graph", "Input freezed graph file", cxxopts::value<std::string>())
+    ("d,data", "Data folder of PRNet repo", cxxopts::value<std::string>())
     ;
 
   auto result = options.parse(argc, argv);
@@ -158,7 +216,19 @@ int main(int argc, char** argv) {
     return -1;
   }
 
+  if (!result.count("graph")) {
+    std::cerr << "Please specify freezed graph with -g or --graph option." << std::endl;
+    return -1;
+  }
+
+  if (!result.count("data")) {
+    std::cerr << "Please specify Data folder of PRNet repo with -d or --data option." << std::endl;
+    return -1;
+  }
+
   std::string image_filename = result["image"].as<std::string>();
+  std::string graph_filename = result["graph"].as<std::string>();
+  std::string data_dirname = result["data"].as<std::string>();
 
   // Load image
   std::cout << "Loading image \"" << image_filename << "\"" << std::endl;
@@ -180,7 +250,7 @@ int main(int argc, char** argv) {
   TensorflowPredictor tf_predictor;
   tf_predictor.init(argc, argv);
   std::cout << "inited" << std::endl;
-  tf_predictor.load("../prnet_frozen.pb", "Placeholder",
+  tf_predictor.load(graph_filename, "Placeholder",
                     "resfcn256/Conv2d_transpose_16/Sigmoid");
   std::cout << "loaded" << std::endl;
   Image<float> out_img;
@@ -203,7 +273,7 @@ int main(int argc, char** argv) {
   SaveAsWObj("output.obj", mesh);
 
 #ifdef USE_GUI
-  bool ret = RunUI(mesh, out_img);
+  bool ret = RunUI(mesh, inp_img);
   if (!ret) {
     std::cerr << "failed to run GUI." << std::endl;
   }
