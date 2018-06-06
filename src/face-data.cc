@@ -42,7 +42,7 @@ bool LoadFaceData(const std::string &datapath, FaceData *face_data)
     while (std::getline(ifs, line)) {
       // `face_ind.txt` stores integer data in scientific fp value.
       // So first read as float, then cast to int.
-      int idx = static_cast<int>(std::stof(line));
+      uint32_t idx = static_cast<uint32_t>(std::stof(line));
       face_data->face_indices.push_back(idx);
       //std::cout << idx << std::endl;
     } 
@@ -67,9 +67,9 @@ bool LoadFaceData(const std::string &datapath, FaceData *face_data)
 
       ss >> xs >> ys >> zs;
  
-      int v0 = static_cast<int>(std::stof(xs));
-      int v1 = static_cast<int>(std::stof(ys));
-      int v2 = static_cast<int>(std::stof(zs));
+      uint32_t v0 = static_cast<uint32_t>(std::stof(xs));
+      uint32_t v1 = static_cast<uint32_t>(std::stof(ys));
+      uint32_t v2 = static_cast<uint32_t>(std::stof(zs));
       face_data->triangles.push_back(v0);
       face_data->triangles.push_back(v1);
       face_data->triangles.push_back(v2);
@@ -88,7 +88,7 @@ bool LoadFaceData(const std::string &datapath, FaceData *face_data)
 
     std::string s;
     while (ifs >> s) {
-      int val = static_cast<int>(std::stof(s));
+      uint32_t val = static_cast<uint32_t>(std::stof(s));
       face_data->uv_kpt_indices.push_back(val);
       // std::cout << val << std::endl;
     } 

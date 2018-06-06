@@ -64,21 +64,21 @@ typedef struct {
   unsigned long long inc;  // not used?
 } pcg32_state_t;
 
-#define PCG32_INITIALIZER \
-  { 0x853c49e6748fea9bULL, 0xda3e39cb94b95bdbULL }
+//#define PCG32_INITIALIZER \
+//  { 0x853c49e6748fea9bULL, 0xda3e39cb94b95bdbULL }
 
-float pcg32_random(pcg32_state_t* rng) {
+static float pcg32_random(pcg32_state_t* rng) {
   unsigned long long oldstate = rng->state;
   rng->state = oldstate * 6364136223846793005ULL + rng->inc;
-  unsigned int xorshifted = ((oldstate >> 18u) ^ oldstate) >> 27u;
+  unsigned int xorshifted = static_cast<unsigned int>(((oldstate >> 18u) ^ oldstate) >> 27u);
   unsigned int rot = oldstate >> 59u;
   unsigned int ret =
       (xorshifted >> rot) | (xorshifted << ((-static_cast<int>(rot)) & 31));
 
-  return (float)((double)ret / (double)4294967296.0);
+  return float(double(ret) / double(4294967296.0));
 }
 
-void pcg32_srandom(pcg32_state_t* rng, uint64_t initstate, uint64_t initseq) {
+static void pcg32_srandom(pcg32_state_t* rng, uint64_t initstate, uint64_t initseq) {
   rng->state = 0U;
   rng->inc = (initseq << 1U) | 1U;
   pcg32_random(rng);
@@ -88,7 +88,18 @@ void pcg32_srandom(pcg32_state_t* rng, uint64_t initstate, uint64_t initseq) {
 
 const float kPI = 3.141592f;
 
-nanort::BVHAccel<float> gAccel;
+
+#ifdef __clang__
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wexit-time-destructors"
+#pragma clang diagnostic ignored "-Wglobal-constructors"
+#endif
+
+static nanort::BVHAccel<float> gAccel;
+
+#ifdef __clang__
+#pragma clang diagnostic pop
+#endif
 
 typedef nanort::real3<float> float3;
 
@@ -105,7 +116,7 @@ inline void CalcNormal(float3& N, float3 v0, float3 v1, float3 v2) {
 }
 
 // Simple texture lookup without filtering.
-void FetchTexture(const prnet::Image<float>& image, float u, float v,
+static void FetchTexture(const prnet::Image<float>& image, float u, float v,
                   float* col) {
   if (image.getWidth() == 0) {
     return;
@@ -115,14 +126,14 @@ void FetchTexture(const prnet::Image<float>& image, float u, float v,
       0, std::min(int(image.getWidth()) - 1, int(u * image.getWidth())));
   int ty = std::max(
       0, std::min(int(image.getHeight()) - 1, int(v * image.getHeight())));
-  int idx_offset = (ty * image.getWidth() + tx) * image.getChannels();
+  size_t idx_offset = (size_t(ty) * image.getWidth() + size_t(tx)) * image.getChannels();
 
   col[0] = image.getData()[idx_offset + 0];
   col[1] = image.getData()[idx_offset + 1];
   col[2] = image.getData()[idx_offset + 2];
 }
 
-void BuildCameraFrame(float3* origin, float3* corner, float3* u, float3* v,
+static void BuildCameraFrame(float3* origin, float3* corner, float3* u, float3* v,
                       float quat[4], float eye[3], float lookat[3], float up[3],
                       float fov, int width, int height) {
   float e[4][4];
@@ -193,7 +204,7 @@ void BuildCameraFrame(float3* origin, float3* corner, float3* u, float3* v,
 
   {
     float flen =
-        (0.5f * (float)height / tanf(0.5f * (float)(fov * kPI / 180.0f)));
+        (0.5f * float(height) / std::tan(0.5f * float(fov * kPI / 180.0f)));
     float3 look1;
     look1[0] = lookat1[0] - eye1[0];
     look1[1] = lookat1[1] - eye1[1];
@@ -220,27 +231,6 @@ void BuildCameraFrame(float3* origin, float3* corner, float3* u, float3* v,
   }
 }
 
-nanort::Ray<float> GenerateRay(const float3& origin, const float3& corner,
-                               const float3& du, const float3& dv, float u,
-                               float v) {
-  float3 dir;
-
-  dir[0] = (corner[0] + u * du[0] + v * dv[0]) - origin[0];
-  dir[1] = (corner[1] + u * du[1] + v * dv[1]) - origin[1];
-  dir[2] = (corner[2] + u * du[2] + v * dv[2]) - origin[2];
-  dir = vnormalize(dir);
-
-  float3 org;
-
-  nanort::Ray<float> ray;
-  ray.org[0] = origin[0];
-  ray.org[1] = origin[1];
-  ray.org[2] = origin[2];
-  ray.dir[0] = dir[0];
-
-  return ray;
-}
-
 bool Renderer::BuildBVH() {
   std::cout << "[Build BVH] " << std::endl;
 
@@ -260,7 +250,7 @@ bool Renderer::BuildBVH() {
 
   printf("num_triangles = %lu\n", mesh_.faces.size() / 3);
 
-  bool ret = gAccel.Build(mesh_.faces.size() / 3, triangle_mesh, triangle_pred,
+  bool ret = gAccel.Build(uint32_t(mesh_.faces.size() / 3), triangle_mesh, triangle_pred,
                           build_options);
   assert(ret);
 
@@ -277,8 +267,8 @@ bool Renderer::BuildBVH() {
   printf("  Max tree depth     : %d\n", stats.max_tree_depth);
   float bmin[3], bmax[3];
   gAccel.BoundingBox(bmin, bmax);
-  printf("  Bmin               : %f, %f, %f\n", bmin[0], bmin[1], bmin[2]);
-  printf("  Bmax               : %f, %f, %f\n", bmax[0], bmax[1], bmax[2]);
+  std::cout << "Bmin              : " << bmin[0] << ", " << bmin[1] << ", " << bmin[2] << std::endl;
+  std::cout << "Bmax              : " << bmax[0] << ", " << bmax[1] << ", " << bmax[2] << std::endl;
 
   return true;
 }
@@ -301,28 +291,22 @@ bool Renderer::Render(RenderBuffer* buffer, float quat[4],
   BuildCameraFrame(&origin, &corner, &u, &v, quat, eye, look_at, up, fov, width,
                    height);
 
-  auto kCancelFlagCheckMilliSeconds = 300;
 
   std::vector<std::thread> workers;
   std::atomic<int> i(0);
 
   uint32_t num_threads = std::max(1U, std::thread::hardware_concurrency());
 
-  auto startT = std::chrono::system_clock::now();
-
   // Initialize RNG.
 
-  for (auto t = 0; t < num_threads; t++) {
+  for (uint64_t t = 0; t < uint64_t(num_threads); t++) {
     workers.emplace_back(std::thread([&, t]() {
       pcg32_state_t rng;
-      pcg32_srandom(&rng, config.pass,
+      pcg32_srandom(&rng, static_cast<unsigned long long>(config.pass),
                     t);  // seed = combination of render pass + thread no.
 
       int y = 0;
       while ((y = i++) < config.height) {
-        auto currT = std::chrono::system_clock::now();
-
-        std::chrono::duration<double, std::milli> ms = currT - startT;
 
         for (int x = 0; x < config.width; x++) {
           nanort::Ray<float> ray;
@@ -346,33 +330,35 @@ bool Renderer::Render(RenderBuffer* buffer, float quat[4],
           ray.min_t = 0.0f;
           ray.max_t = kFar;
 
+          size_t pidx = size_t(y * config.width + x);
+
           // clear pixel
           {
-            buffer->rgba[4 * (y * config.width + x) + 0] = 0.0f;
-            buffer->rgba[4 * (y * config.width + x) + 1] = 0.0f;
-            buffer->rgba[4 * (y * config.width + x) + 2] = 0.0f;
-            buffer->rgba[4 * (y * config.width + x) + 3] = 0.0f;
+            buffer->rgba[4 * pidx + 0] = 0.0f;
+            buffer->rgba[4 * pidx + 1] = 0.0f;
+            buffer->rgba[4 * pidx + 2] = 0.0f;
+            buffer->rgba[4 * pidx + 3] = 0.0f;
 
-            buffer->normal[4 * (y * config.width + x) + 0] = 0.0f;
-            buffer->normal[4 * (y * config.width + x) + 1] = 0.0f;
-            buffer->normal[4 * (y * config.width + x) + 2] = 0.0f;
-            buffer->normal[4 * (y * config.width + x) + 3] = 0.0f;
-            buffer->position[4 * (y * config.width + x) + 0] = 0.0f;
-            buffer->position[4 * (y * config.width + x) + 1] = 0.0f;
-            buffer->position[4 * (y * config.width + x) + 2] = 0.0f;
-            buffer->position[4 * (y * config.width + x) + 3] = 0.0f;
-            buffer->depth[4 * (y * config.width + x) + 0] = 0.0f;
-            buffer->depth[4 * (y * config.width + x) + 1] = 0.0f;
-            buffer->depth[4 * (y * config.width + x) + 2] = 0.0f;
-            buffer->depth[4 * (y * config.width + x) + 3] = 0.0f;
-            buffer->texcoord[4 * (y * config.width + x) + 0] = 0.0f;
-            buffer->texcoord[4 * (y * config.width + x) + 1] = 0.0f;
-            buffer->texcoord[4 * (y * config.width + x) + 2] = 0.0f;
-            buffer->texcoord[4 * (y * config.width + x) + 3] = 0.0f;
-            buffer->diffuse[4 * (y * config.width + x) + 0] = 0.0f;
-            buffer->diffuse[4 * (y * config.width + x) + 1] = 0.0f;
-            buffer->diffuse[4 * (y * config.width + x) + 2] = 0.0f;
-            buffer->diffuse[4 * (y * config.width + x) + 3] = 0.0f;
+            buffer->normal[4 * pidx + 0] = 0.0f;
+            buffer->normal[4 * pidx + 1] = 0.0f;
+            buffer->normal[4 * pidx + 2] = 0.0f;
+            buffer->normal[4 * pidx + 3] = 0.0f;
+            buffer->position[4 * pidx + 0] = 0.0f;
+            buffer->position[4 * pidx + 1] = 0.0f;
+            buffer->position[4 * pidx + 2] = 0.0f;
+            buffer->position[4 * pidx + 3] = 0.0f;
+            buffer->depth[4 * pidx + 0] = 0.0f;
+            buffer->depth[4 * pidx + 1] = 0.0f;
+            buffer->depth[4 * pidx + 2] = 0.0f;
+            buffer->depth[4 * pidx + 3] = 0.0f;
+            buffer->texcoord[4 * pidx + 0] = 0.0f;
+            buffer->texcoord[4 * pidx + 1] = 0.0f;
+            buffer->texcoord[4 * pidx + 2] = 0.0f;
+            buffer->texcoord[4 * pidx + 3] = 0.0f;
+            buffer->diffuse[4 * pidx + 0] = 0.0f;
+            buffer->diffuse[4 * pidx + 1] = 0.0f;
+            buffer->diffuse[4 * pidx + 2] = 0.0f;
+            buffer->diffuse[4 * pidx + 3] = 0.0f;
           }
 
           nanort::TriangleIntersector<> triangle_intersector(
@@ -385,10 +371,10 @@ bool Renderer::Render(RenderBuffer* buffer, float quat[4],
             p[1] = ray.org[1] + isect.t * ray.dir[1];
             p[2] = ray.org[2] + isect.t * ray.dir[2];
 
-            buffer->position[4 * (y * config.width + x) + 0] = p.x();
-            buffer->position[4 * (y * config.width + x) + 1] = p.y();
-            buffer->position[4 * (y * config.width + x) + 2] = p.z();
-            buffer->position[4 * (y * config.width + x) + 3] = 1.0f;
+            buffer->position[4 * pidx + 0] = p.x();
+            buffer->position[4 * pidx + 1] = p.y();
+            buffer->position[4 * pidx + 2] = p.z();
+            buffer->position[4 * pidx + 3] = 1.0f;
 
             unsigned int prim_id = isect.prim_id;
 
@@ -412,15 +398,15 @@ bool Renderer::Render(RenderBuffer* buffer, float quat[4],
               CalcNormal(N, v0, v1, v2);
             }
 
-            buffer->normal[4 * (y * config.width + x) + 0] = 0.5f * N[0] + 0.5f;
-            buffer->normal[4 * (y * config.width + x) + 1] = 0.5f * N[1] + 0.5f;
-            buffer->normal[4 * (y * config.width + x) + 2] = 0.5f * N[2] + 0.5f;
-            buffer->normal[4 * (y * config.width + x) + 3] = 1.0f;
+            buffer->normal[4 * pidx + 0] = 0.5f * N[0] + 0.5f;
+            buffer->normal[4 * pidx + 1] = 0.5f * N[1] + 0.5f;
+            buffer->normal[4 * pidx + 2] = 0.5f * N[2] + 0.5f;
+            buffer->normal[4 * pidx + 3] = 1.0f;
 
-            buffer->depth[4 * (y * config.width + x) + 0] = isect.t;
-            buffer->depth[4 * (y * config.width + x) + 1] = isect.t;
-            buffer->depth[4 * (y * config.width + x) + 2] = isect.t;
-            buffer->depth[4 * (y * config.width + x) + 3] = 1.0f;
+            buffer->depth[4 * pidx + 0] = isect.t;
+            buffer->depth[4 * pidx + 1] = isect.t;
+            buffer->depth[4 * pidx + 2] = isect.t;
+            buffer->depth[4 * pidx + 3] = 1.0f;
 
             float3 UV;
             if (mesh_.uvs.size() > 0) {
@@ -439,10 +425,10 @@ bool Renderer::Render(RenderBuffer* buffer, float quat[4],
 
               UV = Lerp3(uv0, uv1, uv2, isect.u, isect.v);
 
-              buffer->texcoord[4 * (y * config.width + x) + 0] = UV[0];
-              buffer->texcoord[4 * (y * config.width + x) + 1] = UV[1];
-              buffer->texcoord[4 * (y * config.width + x) + 2] = 0.0f;
-              buffer->texcoord[4 * (y * config.width + x) + 3] = 1.0f;
+              buffer->texcoord[4 * pidx + 0] = UV[0];
+              buffer->texcoord[4 * pidx + 1] = UV[1];
+              buffer->texcoord[4 * pidx + 2] = 0.0f;
+              buffer->texcoord[4 * pidx + 3] = 1.0f;
             }
 
             // Fetch texture
@@ -450,18 +436,18 @@ bool Renderer::Render(RenderBuffer* buffer, float quat[4],
             FetchTexture(image_, UV[0], UV[1], tex_col);
 
             // Use texture as diffuse color.
-            buffer->diffuse[4 * (y * config.width + x) + 0] = tex_col[0];
-            buffer->diffuse[4 * (y * config.width + x) + 1] = tex_col[1];
-            buffer->diffuse[4 * (y * config.width + x) + 2] = tex_col[2];
-            buffer->diffuse[4 * (y * config.width + x) + 0] = 1.0f;
+            buffer->diffuse[4 * pidx + 0] = tex_col[0];
+            buffer->diffuse[4 * pidx + 1] = tex_col[1];
+            buffer->diffuse[4 * pidx + 2] = tex_col[2];
+            buffer->diffuse[4 * pidx + 0] = 1.0f;
 
             // Simple shading
             float NdotV = fabsf(vdot(N, dir));
 
-            buffer->rgba[4 * (y * config.width + x) + 0] = NdotV * tex_col[0];
-            buffer->rgba[4 * (y * config.width + x) + 1] = NdotV * tex_col[1];
-            buffer->rgba[4 * (y * config.width + x) + 2] = NdotV * tex_col[2];
-            buffer->rgba[4 * (y * config.width + x) + 3] = 1.0f;
+            buffer->rgba[4 * pidx + 0] = NdotV * tex_col[0];
+            buffer->rgba[4 * pidx + 1] = NdotV * tex_col[1];
+            buffer->rgba[4 * pidx + 2] = NdotV * tex_col[2];
+            buffer->rgba[4 * pidx + 3] = 1.0f;
           }
         }
       }

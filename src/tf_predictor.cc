@@ -34,7 +34,9 @@ namespace prnet {
 
 namespace {
 
-Status ReadEntireFile(tensorflow::Env* env, const string& filename,
+#if 0 
+
+static Status ReadEntireFile(tensorflow::Env* env, const string& filename,
                       Tensor* output) {
   tensorflow::uint64 file_size = 0;
   TF_RETURN_IF_ERROR(env->GetFileSize(filename, &file_size));
@@ -55,6 +57,8 @@ Status ReadEntireFile(tensorflow::Env* env, const string& filename,
   output->scalar<string>()() = data.ToString();
   return Status::OK();
 }
+
+#endif
 
 
 // Reads a model graph definition from disk, and creates a session object you

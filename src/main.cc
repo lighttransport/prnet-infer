@@ -30,7 +30,7 @@
 
 using namespace prnet;
 
-bool LoadImage(const std::string& filename, Image<float>& image) {
+static bool LoadImage(const std::string& filename, Image<float>& image) {
   // Load image
   int width, height, channels;
   unsigned char *data =
@@ -41,7 +41,7 @@ bool LoadImage(const std::string& filename, Image<float>& image) {
   }
 
   // Cast
-  image.create(width, height, channels);
+  image.create(size_t(width), size_t(height), size_t(channels));
   image.foreach([&](int x, int y, int c, float &v) {
       v = static_cast<float>(data[(y * width + x) * channels + c]) / 255.f;
       // TODO(LTE): Do we need degamma?
@@ -54,7 +54,7 @@ bool LoadImage(const std::string& filename, Image<float>& image) {
   return true;
 }
 
-bool SaveImage(const std::string& filename, Image<float>& image) {
+static bool SaveImage(const std::string& filename, Image<float>& image) {
   const size_t height = image.getHeight();
   const size_t width = image.getWidth();
   const size_t channels = image.getChannels();
@@ -62,25 +62,105 @@ bool SaveImage(const std::string& filename, Image<float>& image) {
   // Cast
   std::vector<unsigned char> data(height * width * channels);
   image.foreach([&](int x, int y, int c, float &v) {
-      data[(y * width + x) * channels + c] =
+      data[(size_t(y) * width + size_t(x)) * size_t(channels) + size_t(c)] =
         static_cast<unsigned char>(v * 255.f);
   });
 
 
   // Save
-  stbi_write_jpg(filename.c_str(), width, height, channels, &data.at(0), 0);
+  stbi_write_jpg(filename.c_str(), int(width), int(height), int(channels), &data.at(0), 0);
 
   return true;
 }
 
 // --------------------------------
 
-inline int clamp(int f, int fmin, int fmax)
+template<typename T>
+inline T clamp(T f, T fmin, T fmax)
 {
   return std::max(std::min(fmax, f), fmin);
 }
 
-void CropImage(
+
+inline void FilterFloat(
+  float* rgba,
+  const float* image,
+  int i00, int i10, int i01, int i11,
+  float w[4], // weight
+  int channels)
+{
+  float texel[4][4];
+
+
+  rgba[0] = rgba[1] = rgba[2] = 0.0f;
+
+  // Filter in linear space
+  for (int i = 0; i < channels; i++) {
+      texel[0][i] = image[i00+i];
+      texel[1][i] = image[i10+i];
+      texel[2][i] = image[i01+i];
+      texel[3][i] = image[i11+i];
+  }
+
+  for (int i = 0; i < channels; i++) {
+    rgba[i] = w[0] * texel[0][i] +
+              w[1] * texel[1][i] +
+              w[2] * texel[2][i] +
+              w[3] * texel[3][i];
+  }
+
+  if (channels < 4) {
+    rgba[3] = 1.0;
+  }
+}
+
+// Fetch texture with bilinear filtering.
+static void FetchTexture(const float u, const float v,
+  int width, int height, int components, const float *image, float *rgba)
+{
+    float sx = std::floor(u);
+    float sy = std::floor(v);
+
+    float uu = u - sx;
+    float vv = v - sy;
+
+    // clamp
+    uu = clamp(uu, 0.0f, 1.0f);
+    vv = clamp(vv, 0.0f, 1.0f);
+
+    float px = (width  - 1) * uu;
+    float py = (height - 1) * vv;
+
+    int x0 = int(px);
+    int y0 = int(py);
+    int x1 = ((x0 + 1) >= width ) ? (width  - 1) : (x0 + 1);
+    int y1 = ((y0 + 1) >= height) ? (height - 1) : (y0 + 1);
+
+    float dx = px - float(x0);
+    float dy = py - float(y0);
+
+    float w[4];
+
+    w[0] = (1.0f - dx) * (1.0f - dy);
+    w[1] = (1.0f - dx) * (      dy);
+    w[2] = (       dx) * (1.0f - dy);
+    w[3] = (       dx) * (      dy);
+
+    int i00 = components * (y0 * width + x0);
+    int i01 = components * (y0 * width + x1);
+    int i10 = components * (y1 * width + x0);
+    int i11 = components * (y1 * width + x1);
+
+    FilterFloat(rgba, image, i00, i10, i01, i11, w, components);
+}
+
+
+//
+// Crop an image with bilinear filtering.
+// pixel bounding box is defined in (xs, ys) - (xe, ye)
+// bounding box range is in (0, 0) x (width-1, height-1)
+//
+static void CropImage(
   const Image<float> &in_img,
   int xs, int xe,
   int ys, int ye,
@@ -90,7 +170,6 @@ void CropImage(
   size_t width = in_img.getWidth();
   size_t height = in_img.getHeight();
   size_t channels = in_img.getChannels();
-  size_t stride = width * channels;
 
   out_img->create(width, height, channels);
 
@@ -98,22 +177,26 @@ void CropImage(
     return;    
   }
 
-  float xstep = 1.0f / (xe - xs);
-  float ystep = 1.0f / (ye - ys);
-  float *ret;
+  // clamp
+  xs = clamp(xs, 0, int(width)-1);
+  xe = clamp(xe, 0, int(width)-1);
+  ys = clamp(ys, 0, int(height)-1);
+  ye = clamp(ye, 0, int(height)-1);
 
   const float *src = in_img.getData();
   float *dst = out_img->getData();
 
-  // TODO(LTE): biliner interpolation.
   for (size_t y = 0; y < height; y++) {
-    int py = ys + y * ystep;
+    float v = (ys + 0.5f + (y / float(height)) * (ye - ys + 1)) / float(height);
     for (size_t x = 0; x < width; x++) {
-      int px = xs + x * xstep;
+      float u = (xs + 0.5f + (x / float(width)) * (xe - xs + 1)) / float(width);
+
+      float rgba[4];
+      //std::cout << "u = " << u << ", v = " << v << std::endl;
+      FetchTexture(u, v, int(width), int(height), int(channels), src, rgba);
 
       for (size_t c = 0; c < channels; c++) {
-        float val = src[channels * (py * width + px) + c];
-        dst[channels * (y * width + x) + c] = val;
+        dst[channels * (y * width + x) + c] = rgba[c];
       }
     }
   }
@@ -121,7 +204,7 @@ void CropImage(
 }
 
 // Convert 3D position map(Image) to mesh using FaceData.
-bool ConvertToMesh(const Image<float> &image, const FaceData &face_data, Mesh *mesh) {
+static bool ConvertToMesh(const Image<float> &image, const FaceData &face_data, const float crop_scaling_factor, Mesh *mesh) {
   if (image.getWidth() != 256) {
     std::cerr << "Invalid width for Image. " << std::endl;
     return false;
@@ -140,6 +223,15 @@ bool ConvertToMesh(const Image<float> &image, const FaceData &face_data, Mesh *m
   float bmin[3];
   float bmax[3];
 
+  // DBG
+  for (size_t i = 0; i < 10; i++) {
+    float x = image.getData()[3 * i + 0];
+    float y = image.getData()[3 * i + 1];
+    float z = image.getData()[3 * i + 2];
+  
+    std::cout << "[" << i << "] + " << x << ", " << y << ", " << z << std::endl;
+  }
+
   // Look up vertex position from 3D position map(256x256x3)
   mesh->vertices.clear();
   mesh->uvs.clear();
@@ -147,13 +239,21 @@ bool ConvertToMesh(const Image<float> &image, const FaceData &face_data, Mesh *m
 
     size_t idx = face_data.face_indices[i];
 
-    int px = idx % image.getWidth();
-    int py = idx / image.getHeight();
+    uint32_t px = uint32_t(idx % image.getWidth());
+    uint32_t py = uint32_t(idx / image.getHeight());
 
     float x = image.getData()[3 * (py * image.getWidth() + px) + 0];
     float y = image.getData()[3 * (py * image.getWidth() + px) + 1];
     float z = image.getData()[3 * (py * image.getWidth() + px) + 2];
 
+    // Compensate scaling factor done in the previous cropping image phase.
+    (void)crop_scaling_factor;
+    x = x * crop_scaling_factor - 0.3f; // HACK. -0.3f = -76.5/255
+    y = y * crop_scaling_factor - 0.3f;
+    //z = z / crop_scaling_factor;
+    
+
+  
     mesh->vertices.push_back(x);
     mesh->vertices.push_back(y);
     mesh->vertices.push_back(z);
@@ -184,7 +284,7 @@ bool ConvertToMesh(const Image<float> &image, const FaceData &face_data, Mesh *m
   std::cout << "bmin " << bmin[0] << ", " << bmin[1] << ", " << bmin[2] << std::endl;
   std::cout << "bmax " << bmax[0] << ", " << bmax[1] << ", " << bmax[2] << std::endl;
 
-#if 0
+#if 1
   // Centerize vertex position.
   {
     float bsize[3];
@@ -213,7 +313,7 @@ bool ConvertToMesh(const Image<float> &image, const FaceData &face_data, Mesh *m
 }
 
 // Save as wavefront .obj mesh
-bool SaveAsWObj(const std::string &filename, prnet::Mesh &mesh)
+static bool SaveAsWObj(const std::string &filename, prnet::Mesh &mesh)
 {
   std::ofstream ofs(filename);
   if (!ofs) {
@@ -231,9 +331,9 @@ bool SaveAsWObj(const std::string &filename, prnet::Mesh &mesh)
 
   for (size_t i = 0; i < mesh.faces.size() / 3; i++) {
     // For .obj, face index starts with 1, so add +1.
-    int f0 = mesh.faces[3 * i + 0] + 1; 
-    int f1 = mesh.faces[3 * i + 1] + 1; 
-    int f2 = mesh.faces[3 * i + 2] + 1; 
+    uint32_t f0 = mesh.faces[3 * i + 0] + 1; 
+    uint32_t f1 = mesh.faces[3 * i + 1] + 1; 
+    uint32_t f2 = mesh.faces[3 * i + 2] + 1; 
 
     // Assume # of v == # of vt.
     ofs << "f " << f0 << "/" << f0 << " " << f1 << "/" << f1 << " " << f2 << "/" << f2 << std::endl;
@@ -244,6 +344,10 @@ bool SaveAsWObj(const std::string &filename, prnet::Mesh &mesh)
 }
 
 // --------------------------------
+
+#ifdef __clang__
+#pragma clang diagnostic ignored "-Wunreachable-code"
+#endif
 
 int main(int argc, char** argv) {
   
@@ -283,6 +387,34 @@ int main(int argc, char** argv) {
     return -1;
   }
 
+  // Crop Image.
+  Image<float> cropped_img;
+  float crop_scaling_factor = -1.0f; // should be filled in the following clause.
+  {
+    float width = float(inp_img.getWidth());
+    float height = float(inp_img.getHeight());
+
+    // In non dlib path, PRNet crops image from image center with x1.6 scaling
+    // then revert it by (1/1.6) scaling.
+    // (See PRNet's api.py::PRN::process for details)
+    float scale = 1.6f;
+    float center[2] = {width/2.0f, height/2.0f};
+    
+    int region[4];
+    region[0] = int(center[0] - (width/2.0f) / scale);
+    region[1] = int(center[0] + (width/2.0f) / scale);
+    region[2] = int(center[1] - (height/2.0f) / scale);
+    region[3] = int(center[1] + (height/2.0f) / scale);
+
+    CropImage(inp_img, region[0], region[1], region[2], region[3], &cropped_img);
+
+    SaveImage("cropped_img.jpg", cropped_img);
+
+    crop_scaling_factor = scale;
+
+  }
+  assert(crop_scaling_factor > 0.0f);
+
   FaceData face_data;
 
   // Load face data
@@ -304,13 +436,13 @@ int main(int argc, char** argv) {
   std::cout << "Start running network... " << std::endl << std::flush;
 
   auto startT = std::chrono::system_clock::now();
-  tf_predictor.predict(inp_img, out_img);
+  tf_predictor.predict(cropped_img, out_img);
   auto endT = std::chrono::system_clock::now();
   std::chrono::duration<double, std::milli> ms = endT - startT;
   std::cout << "Ran network. elapsed = " << ms.count() << " [ms] " << std::endl;
 
   Mesh mesh;
-  if (!ConvertToMesh(out_img, face_data, &mesh)) {
+  if (!ConvertToMesh(out_img, face_data, crop_scaling_factor, &mesh)) {
     std::cerr << "failed to convert result image to mesh." << std::endl;
     return -1;
   }

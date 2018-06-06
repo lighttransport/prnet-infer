@@ -9,8 +9,17 @@
 
 namespace prnet {
 
+#ifdef __clang__
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wglobal-constructors"
+#endif
+
 const static uint32_t DEFAULT_HW_CONCURRENCY =
   std::max(1U, std::thread::hardware_concurrency());
+
+#ifdef __clang__
+#pragma clang diagnostic pop
+#endif
 
 template <typename T>
 class Image {

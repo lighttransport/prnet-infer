@@ -22,7 +22,7 @@ struct RenderBuffer {
   std::vector<float> texcoord; // 4
   std::vector<float> diffuse; // 4
 
-  void resize(int width, int height) {
+  void resize(size_t width, size_t height) {
     rgba.resize(width * height * 4);
     normal.resize(width * height * 4);
     depth.resize(width * height * 4);

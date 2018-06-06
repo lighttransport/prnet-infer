@@ -1,16 +1,16 @@
 // UI loop
 
 #include "ui.h"
-#include "gui/render.h"
 #include "gui/render-buffer.h"
+#include "gui/render.h"
 #include "gui/trackball.h"
 
 #include "gui/glfw/include/GLFW/glfw3.h"
 #include "gui/imgui/imgui.h"
 #include "gui/imgui/imgui_impl_glfw_gl2.h"
 
-#include <iostream>
 #include <cmath>
+#include <iostream>
 #include <mutex>
 
 namespace prnet {
@@ -21,26 +21,30 @@ struct UIParameters {
   int showBufferMode = example::SHOW_BUFFER_COLOR;
 };
 
-example::RenderBuffer gRenderBuffer;
-UIParameters gUIParam;
+#ifdef __clang__
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wexit-time-destructors"
+#pragma clang diagnostic ignored "-Wglobal-constructors"
+#endif
 
-int gWidth = 512;
-int gHeight = 512;
-int gMousePosX = -1, gMousePosY = -1;
-bool gMouseLeftDown = false;
-bool gTabPressed = false;
-bool gShiftPressed = false;
-float gCurrQuat[4] = {0.0f, 0.0f, 0.0f, 1.0f};
-float gPrevQuat[4] = {0.0f, 0.0f, 0.0f, 1.0f};
+static example::RenderBuffer gRenderBuffer;
+static UIParameters gUIParam;
 
-example::Renderer gRenderer;
+static float gCurrQuat[4] = {0.0f, 0.0f, 0.0f, 1.0f};
+static float gPrevQuat[4] = {0.0f, 0.0f, 0.0f, 1.0f};
 
-std::atomic<bool> gRenderQuit;
-std::atomic<bool> gRenderRefresh;
-example::RenderConfig gRenderConfig;
-std::mutex gMutex;
+static example::Renderer gRenderer;
 
-void RequestRender() {
+static std::atomic<bool> gRenderQuit;
+static std::atomic<bool> gRenderRefresh;
+static example::RenderConfig gRenderConfig;
+static std::mutex gMutex;
+
+#ifdef __clang__
+#pragma clang diagnostic pop
+#endif
+
+static void RequestRender() {
   {
     std::lock_guard<std::mutex> guard(gMutex);
     gRenderConfig.pass = 0;
@@ -49,8 +53,7 @@ void RequestRender() {
   gRenderRefresh = true;
 }
 
-
-void RenderThread() {
+static void RenderThread() {
   {
     std::lock_guard<std::mutex> guard(gMutex);
     gRenderConfig.pass = 0;
@@ -68,7 +71,7 @@ void RenderThread() {
       continue;
     }
 
-    auto startT = std::chrono::system_clock::now();
+    //auto startT = std::chrono::system_clock::now();
 
     // Initialize display buffer for the first pass.
     bool initial_pass = false;
@@ -81,8 +84,7 @@ void RenderThread() {
 
     std::cout << "Render!" << std::endl;
 
-    bool ret =
-        gRenderer.Render(&gRenderBuffer, gCurrQuat, gRenderConfig);
+    bool ret = gRenderer.Render(&gRenderBuffer, gCurrQuat, gRenderConfig);
 
     if (ret) {
       std::lock_guard<std::mutex> guard(gMutex);
@@ -90,12 +92,11 @@ void RenderThread() {
       gRenderConfig.pass++;
     }
 
-    auto endT = std::chrono::system_clock::now();
-
-    std::chrono::duration<double, std::milli> ms = endT - startT;
+    //auto endT = std::chrono::system_clock::now();
 
     gRenderRefresh = false;
 
+    //std::chrono::duration<double, std::milli> ms = endT - startT;
     // std::cout << ms.count() << " [ms]\n";
   }
 }
@@ -131,8 +132,9 @@ inline float pseudoColor(float v, int ch) {
   }
 }
 
-void Display(int width, int height, int buffer_mode, const example::RenderBuffer &buffer) {
-  std::vector<float> buf(width * height * 4);
+static void Display(int width, int height, int buffer_mode,
+             const example::RenderBuffer &buffer) {
+  std::vector<float> buf(size_t(width * height * 4));
   if (buffer_mode == example::SHOW_BUFFER_COLOR) {
     // TODO: normalize
     for (size_t i = 0; i < buf.size() / 4; i++) {
@@ -150,8 +152,10 @@ void Display(int width, int height, int buffer_mode, const example::RenderBuffer
       buf[i] = buffer.position[i];
     }
   } else if (buffer_mode == example::SHOW_BUFFER_DEPTH) {
-    float d_min = std::min(gUIParam.showDepthRange[0], gUIParam.showDepthRange[1]);
-    float d_diff = std::fabs(gUIParam.showDepthRange[1] - gUIParam.showDepthRange[0]);
+    float d_min =
+        std::min(gUIParam.showDepthRange[0], gUIParam.showDepthRange[1]);
+    float d_diff =
+        std::fabs(gUIParam.showDepthRange[1] - gUIParam.showDepthRange[0]);
     d_diff = std::max(d_diff, std::numeric_limits<float>::epsilon());
     for (size_t i = 0; i < buf.size(); i++) {
       float v = (buffer.depth[i] - d_min) / d_diff;
@@ -173,14 +177,12 @@ void Display(int width, int height, int buffer_mode, const example::RenderBuffer
 
   glRasterPos2i(-1, -1);
   glDrawPixels(width, height, GL_RGBA, GL_FLOAT,
-               static_cast<const GLvoid*>(&buf.at(0)));
-
+               static_cast<const GLvoid *>(&buf.at(0)));
 }
- 
-static void HandleUserInput(GLFWwindow *window,
-                            const double view_width, const double view_height,
-                            double *prev_mouse_x, double *prev_mouse_y) {
 
+static void HandleUserInput(GLFWwindow *window, const double view_width,
+                            const double view_height, double *prev_mouse_x,
+                            double *prev_mouse_y) {
   // Handle mouse input
   double mouse_x, mouse_y;
   glfwGetCursorPos(window, &mouse_x, &mouse_y);
@@ -191,9 +193,9 @@ static void HandleUserInput(GLFWwindow *window,
 
   int window_width, window_height;
   glfwGetWindowSize(window, &window_width, &window_height);
-  const double width = static_cast<double>(window_width);
+  //const double width = static_cast<double>(window_width);
   const double height = static_cast<double>(window_height);
- 
+
   const double kTransScale = 0.005;
   const double kZoomScale = 0.075;
 
@@ -223,33 +225,29 @@ static void HandleUserInput(GLFWwindow *window,
       // Assume render view is located in lower-left.
       double offset_y = height - view_height;
 
-      trackball(gPrevQuat, (2.f * (*prev_mouse_x) - view_width) / view_width,
-                (height - 2.f * ((*prev_mouse_y) - offset_y)) / view_height,
-                (2.f * mouse_x - view_width) / view_width,
-                (height - 2.f * (mouse_y - offset_y)) / view_height);
+      trackball(gPrevQuat, float((2.0 * (*prev_mouse_x) - view_width) / view_width),
+                float((height - 2.0 * ((*prev_mouse_y) - offset_y)) / view_height),
+                float((2.0 * mouse_x - view_width) / view_width),
+                float((height - 2.0 * (mouse_y - offset_y)) / view_height));
       add_quats(gPrevQuat, gCurrQuat, gCurrQuat);
 
       RequestRender();
-
     }
   }
 
   // Update mouse coordinates
   *prev_mouse_x = mouse_x;
   *prev_mouse_y = mouse_y;
-
 }
 
-
-bool RunUI(const Mesh &mesh, const Image<float> &input_image)
-{
+bool RunUI(const Mesh &mesh, const Image<float> &input_image) {
   // Setup window
   glfwSetErrorCallback(error_callback);
   if (!glfwInit()) {
     std::cerr << "Failed to initialize glfw" << std::endl;
     return false;
   }
-  GLFWwindow *window = glfwCreateWindow(1280, 720, "PRNet infer", NULL, NULL);
+  GLFWwindow *window = glfwCreateWindow(1280, 720, "PRNet infer", nullptr, nullptr);
   glfwMakeContextCurrent(window);
   glfwSwapInterval(1);  // Enable vsync
 
@@ -284,7 +282,7 @@ bool RunUI(const Mesh &mesh, const Image<float> &input_image)
 
   gRenderConfig.max_passes = 1;
 
-  gRenderBuffer.resize(gRenderConfig.width, gRenderConfig.height);
+  gRenderBuffer.resize(size_t(gRenderConfig.width), size_t(gRenderConfig.height));
 
   trackball(gCurrQuat, 0.0f, 0.0f, 0.0f, 0.0f);
 
@@ -305,7 +303,6 @@ bool RunUI(const Mesh &mesh, const Image<float> &input_image)
   while (!glfwWindowShouldClose(window)) {
     glfwPollEvents();
     ImGui_ImplGlfwGL2_NewFrame();
-
 
     // Ctrl + q to exit
     if (glfwGetKey(window, GLFW_KEY_LEFT_CONTROL) == GLFW_PRESS &&
@@ -331,26 +328,33 @@ bool RunUI(const Mesh &mesh, const Image<float> &input_image)
     }
 
     // Handle user's mouse and key input
-    HandleUserInput(window, double(gRenderConfig.width), double(gRenderConfig.height), &mouse_x, &mouse_y);
+    HandleUserInput(window, double(gRenderConfig.width),
+                    double(gRenderConfig.height), &mouse_x, &mouse_y);
 
     // ImGui
     ImGui::Begin("UI");
     {
-      ImGui::RadioButton("color", &(gUIParam.showBufferMode), example::SHOW_BUFFER_COLOR);
+      ImGui::RadioButton("color", &(gUIParam.showBufferMode),
+                         example::SHOW_BUFFER_COLOR);
       ImGui::SameLine();
-      ImGui::RadioButton("normal", &(gUIParam.showBufferMode), example::SHOW_BUFFER_NORMAL);
+      ImGui::RadioButton("normal", &(gUIParam.showBufferMode),
+                         example::SHOW_BUFFER_NORMAL);
       ImGui::SameLine();
-      ImGui::RadioButton("position", &(gUIParam.showBufferMode), example::SHOW_BUFFER_POSITION);
+      ImGui::RadioButton("position", &(gUIParam.showBufferMode),
+                         example::SHOW_BUFFER_POSITION);
       ImGui::SameLine();
-      ImGui::RadioButton("depth", &(gUIParam.showBufferMode), example::SHOW_BUFFER_DEPTH);
+      ImGui::RadioButton("depth", &(gUIParam.showBufferMode),
+                         example::SHOW_BUFFER_DEPTH);
       ImGui::SameLine();
-      ImGui::RadioButton("texcoord", &(gUIParam.showBufferMode), example::SHOW_BUFFER_TEXCOORD);
+      ImGui::RadioButton("texcoord", &(gUIParam.showBufferMode),
+                         example::SHOW_BUFFER_TEXCOORD);
       ImGui::SameLine();
-      ImGui::RadioButton("diffuse(texture)", &(gUIParam.showBufferMode), example::SHOW_BUFFER_DIFFUSE);
+      ImGui::RadioButton("diffuse(texture)", &(gUIParam.showBufferMode),
+                         example::SHOW_BUFFER_DIFFUSE);
 
       ImGui::InputFloat2("show depth range", gUIParam.showDepthRange);
-      ImGui::Checkbox("show depth pesudo color", &gUIParam.showDepthPeseudoColor);
-
+      ImGui::Checkbox("show depth pesudo color",
+                      &gUIParam.showDepthPeseudoColor);
     }
     ImGui::End();
 
@@ -361,7 +365,8 @@ bool RunUI(const Mesh &mesh, const Image<float> &input_image)
     glClearColor(0.45f, 0.55f, 0.60f, 1.00f);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
 
-    Display(gRenderConfig.width, gRenderConfig.height, gUIParam.showBufferMode, gRenderBuffer);
+    Display(gRenderConfig.width, gRenderConfig.height, gUIParam.showBufferMode,
+            gRenderBuffer);
 
     // ImGui Display
     // glUseProgram(0); // You may want this if using this code in an OpenGL 3+
@@ -369,23 +374,19 @@ bool RunUI(const Mesh &mesh, const Image<float> &input_image)
     ImGui::Render();
     ImGui_ImplGlfwGL2_RenderDrawData(ImGui::GetDrawData());
     glfwSwapBuffers(window);
-
   }
 
   // Cleanup
-  //ImGui::SaveDock();
+  // ImGui::SaveDock();
 
- 
   gRenderQuit = true;
   renderThread.join();
-
 
   ImGui_ImplGlfwGL2_Shutdown();
   ImGui::DestroyContext();
   glfwTerminate();
-  
+
   return true;
 }
 
-
-} // namespace prnet
+}  // namespace prnet

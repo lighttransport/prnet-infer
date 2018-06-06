@@ -8,9 +8,9 @@ namespace prnet {
 
 struct FaceData {
 
-  std::vector<int> uv_kpt_indices; // 2 x 68. uv-data/uv_kpt_ind.txt
-  std::vector<int> face_indices; // uv-data/face_idx.txt
-  std::vector<int> triangles; // # of triangles * xyz. uv-data/triangles.txt
+  std::vector<uint32_t> uv_kpt_indices; // 2 x 68. uv-data/uv_kpt_ind.txt
+  std::vector<uint32_t> face_indices; // uv-data/face_idx.txt
+  std::vector<uint32_t> triangles; // # of triangles * xyz. uv-data/triangles.txt
 
 };
 

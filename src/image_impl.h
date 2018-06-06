@@ -29,11 +29,12 @@ void Image<T>::foreach(const std::function<void(int, int, int, T&)> &func,
   std::atomic<int> i(0);
   for (uint32_t t = 0; t < n_threads; t++) {
     workers.emplace_back(std::thread([&, t]() {
+      (void)t;
       size_t y = 0;
-      while ((y = i++) < height) {
+      while ((y = size_t(i++)) < height) {
         for (size_t x = 0; x < width; x++) {
-          for (int c = 0; c < channels; c++) {
-            func(x, y, c, data[(y * width + x) * channels + c]);
+          for (size_t c = 0; c < channels; c++) {
+            func(int(x), int(y), int(c), data[(y * width + x) * channels + c]);
           }
         }
       }
