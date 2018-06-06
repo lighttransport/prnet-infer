@@ -82,8 +82,6 @@ static void RenderThread() {
       }
     }
 
-    std::cout << "Render!" << std::endl;
-
     bool ret = gRenderer.Render(&gRenderBuffer, gCurrQuat, gRenderConfig);
 
     if (ret) {
