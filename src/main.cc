@@ -118,6 +118,18 @@ inline void FilterFloat(
 static void FetchTexture(const float u, const float v,
   int width, int height, int components, const float *image, float *rgba)
 {
+    // clamp to edge
+    if ((u < 0.0f) || 
+        (u >= 1.0f) || 
+        (v < 0.0f) || 
+        (v >= 1.0f)) {
+      rgba[0] = 0.0f;
+      rgba[1] = 0.0f;
+      rgba[2] = 0.0f;
+      rgba[3] = 0.0f;
+      return;
+    }
+
     float sx = std::floor(u);
     float sy = std::floor(v);
 
@@ -177,12 +189,6 @@ static void CropImage(
     return;    
   }
 
-  // clamp
-  xs = clamp(xs, 0, int(width)-1);
-  xe = clamp(xe, 0, int(width)-1);
-  ys = clamp(ys, 0, int(height)-1);
-  ye = clamp(ye, 0, int(height)-1);
-
   const float *src = in_img.getData();
   float *dst = out_img->getData();
 
@@ -192,7 +198,6 @@ static void CropImage(
       float u = (xs + 0.5f + (x / float(width)) * (xe - xs + 1)) / float(width);
 
       float rgba[4];
-      //std::cout << "u = " << u << ", v = " << v << std::endl;
       FetchTexture(u, v, int(width), int(height), int(channels), src, rgba);
 
       for (size_t c = 0; c < channels; c++) {
@@ -206,17 +211,17 @@ static void CropImage(
 // Convert 3D position map(Image) to mesh using FaceData.
 static bool ConvertToMesh(const Image<float> &image, const FaceData &face_data, const float crop_scaling_factor, Mesh *mesh) {
   if (image.getWidth() != 256) {
-    std::cerr << "Invalid width for Image. " << std::endl;
+    std::cerr << "Invalid width for Image. width must be 256 but has " << image.getWidth() << std::endl;
     return false;
   }
 
   if (image.getHeight() != 256) {
-    std::cerr << "Invalid height for Image. " << std::endl;
+    std::cerr << "Invalid height for Image. height must be 256 but has " << image.getHeight() << std::endl;
     return false;
   }
 
   if (image.getChannels() != 3) {
-    std::cerr << "Invalid channels for Image. " << std::endl;
+    std::cerr << "Invalid channels for Image. channels must be 3 but has " << image.getChannels() << std::endl;
     return false;
   }
 
@@ -248,12 +253,10 @@ static bool ConvertToMesh(const Image<float> &image, const FaceData &face_data, 
 
     // Compensate scaling factor done in the previous cropping image phase.
     (void)crop_scaling_factor;
-    x = x * crop_scaling_factor - 0.3f; // HACK. -0.3f = -76.5/255
-    y = y * crop_scaling_factor - 0.3f;
+    x = x * crop_scaling_factor - 0.3f; // HACK. 76.5 / 255
+    y = y * crop_scaling_factor - 0.3f; // HACK. 76.5 / 255
     //z = z / crop_scaling_factor;
     
-
-  
     mesh->vertices.push_back(x);
     mesh->vertices.push_back(y);
     mesh->vertices.push_back(z);
@@ -273,9 +276,8 @@ static bool ConvertToMesh(const Image<float> &image, const FaceData &face_data, 
     }
 
     // compute and normalize uv
-    // Assume position is in [0, 1]^3, so uv = xy
-    float u = x; 
-    float v = y; 
+    float u = x + 0.065f; // FIXME(LTE): Investigate why 0.065 works well
+    float v = y + 0.065f; 
 
     mesh->uvs.push_back(u);
     mesh->uvs.push_back(v);
@@ -395,20 +397,22 @@ int main(int argc, char** argv) {
     float height = float(inp_img.getHeight());
 
     // In non dlib path, PRNet crops image from image center with x1.6 scaling
-    // then revert it by (1/1.6) scaling.
+    // (minify) then revert it by (1/1.6) scaling.
     // (See PRNet's api.py::PRN::process for details)
     float scale = 1.6f;
     float center[2] = {width/2.0f, height/2.0f};
     
     int region[4];
-    region[0] = int(center[0] - (width/2.0f) / scale);
-    region[1] = int(center[0] + (width/2.0f) / scale);
-    region[2] = int(center[1] - (height/2.0f) / scale);
-    region[3] = int(center[1] + (height/2.0f) / scale);
+    region[0] = int(center[0] - (width/2.0f) / (1.0f / scale));
+    region[1] = int(center[0] + (width/2.0f) / (1.0f / scale));
+    region[2] = int(center[1] - (height/2.0f) / (1.0f / scale));
+    region[3] = int(center[1] + (height/2.0f) / (1.0f / scale));
+
+    std::cout << "region " << region[0] << ", " << region[1] << ", " << region[2] << ", " << region[3] << std::endl;
 
     CropImage(inp_img, region[0], region[1], region[2], region[3], &cropped_img);
 
-    SaveImage("cropped_img.jpg", cropped_img);
+    SaveImage("dbg_cropped_img.jpg", cropped_img);
 
     crop_scaling_factor = scale;
 
@@ -441,6 +445,10 @@ int main(int argc, char** argv) {
   std::chrono::duration<double, std::milli> ms = endT - startT;
   std::cout << "Ran network. elapsed = " << ms.count() << " [ms] " << std::endl;
 
+  // Save image
+  SaveImage("out.jpg", out_img);
+
+
   Mesh mesh;
   if (!ConvertToMesh(out_img, face_data, crop_scaling_factor, &mesh)) {
     std::cerr << "failed to convert result image to mesh." << std::endl;
@@ -454,9 +462,6 @@ int main(int argc, char** argv) {
   if (!ret) {
     std::cerr << "failed to run GUI." << std::endl;
   }
-#else
-  // Save image
-  SaveImage("out.jpg", out_img);
 #endif
 
   return 0;
