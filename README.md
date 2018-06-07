@@ -123,4 +123,5 @@ PRnetInfer source code is licensed under MIT license. Please see `LICENSE` for d
 * NanoRT : MIT license. https://github.com/lighttransport/nanort
 * ImGui : MIT license. https://github.com/ocornut/imgui 
 * glfw : zlib/libpng license http://www.glfw.org/
+* cxxopts : MIT license. https://github.com/jarro2783/cxxopts
 
