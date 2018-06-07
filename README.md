@@ -98,8 +98,8 @@ $ ./prnet --graph ../freezed_graph.pb --data ../../PRNet/Data --image ../input.p
 ```
 
 * `--image` specifies input image(must be 256x256 pixels and contains face region by manual cropping)
+* `--graph` specifies freezed graph file.
 * `--data` specifies `Data` folder of PRNet repository.
-*
 
 Wavefront .obj file will be written to `output.obj`.
 
