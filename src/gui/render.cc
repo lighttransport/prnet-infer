@@ -347,10 +347,10 @@ bool Renderer::Render(RenderBuffer* buffer, float quat[4],
             buffer->position[4 * pidx + 1] = 0.0f;
             buffer->position[4 * pidx + 2] = 0.0f;
             buffer->position[4 * pidx + 3] = 0.0f;
-            buffer->depth[4 * pidx + 0] = 0.0f;
-            buffer->depth[4 * pidx + 1] = 0.0f;
-            buffer->depth[4 * pidx + 2] = 0.0f;
-            buffer->depth[4 * pidx + 3] = 0.0f;
+            buffer->depth[4 * pidx + 0] = 1000.0f;
+            buffer->depth[4 * pidx + 1] = 1000.0f;
+            buffer->depth[4 * pidx + 2] = 1000.0f;
+            buffer->depth[4 * pidx + 3] = 1000.0f;
             buffer->texcoord[4 * pidx + 0] = 0.0f;
             buffer->texcoord[4 * pidx + 1] = 0.0f;
             buffer->texcoord[4 * pidx + 2] = 0.0f;
@@ -433,13 +433,14 @@ bool Renderer::Render(RenderBuffer* buffer, float quat[4],
 
             // Fetch texture
             float tex_col[3];
-            FetchTexture(image_, UV[0], UV[1], tex_col);
+            // add global texture offset
+            FetchTexture(image_, UV[0] + config.uv_offset[0], UV[1] + config.uv_offset[1], tex_col);
 
             // Use texture as diffuse color.
             buffer->diffuse[4 * pidx + 0] = tex_col[0];
             buffer->diffuse[4 * pidx + 1] = tex_col[1];
             buffer->diffuse[4 * pidx + 2] = tex_col[2];
-            buffer->diffuse[4 * pidx + 0] = 1.0f;
+            buffer->diffuse[4 * pidx + 3] = 1.0f;
 
             // Simple shading
             float NdotV = fabsf(vdot(N, dir));

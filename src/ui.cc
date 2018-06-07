@@ -16,7 +16,7 @@
 namespace prnet {
 
 struct UIParameters {
-  float showDepthRange[2] = {0.0f, 3.0f};
+  float showDepthRange[2] = {1400.0f, 1700.0f}; // Good for fov 8
   bool showDepthPeseudoColor = false;
   int showBufferMode = example::SHOW_BUFFER_COLOR;
 };
@@ -181,6 +181,12 @@ static void Display(int width, int height, int buffer_mode,
 static void HandleUserInput(GLFWwindow *window, const double view_width,
                             const double view_height, double *prev_mouse_x,
                             double *prev_mouse_y) {
+
+  ImGuiIO& io = ImGui::GetIO();
+  if (io.WantCaptureMouse || io.WantCaptureKeyboard) {
+    return;
+  }
+
   // Handle mouse input
   double mouse_x, mouse_y;
   glfwGetCursorPos(window, &mouse_x, &mouse_y);
@@ -194,8 +200,8 @@ static void HandleUserInput(GLFWwindow *window, const double view_width,
   //const double width = static_cast<double>(window_width);
   const double height = static_cast<double>(window_height);
 
-  const double kTransScale = 0.005;
-  const double kZoomScale = 0.075;
+  const double kTransScale = 0.05;
+  const double kZoomScale = 0.75;
 
   if (ImGui::IsMouseDown(0)) {  // left mouse button
 
@@ -262,10 +268,10 @@ bool RunUI(const Mesh &mesh, const Image<float> &input_image) {
   // Setup style
   ImGui::StyleColorsDark();
 
-  // Setup raytrace renderer;
+  // Setup rendering settings;
   gRenderConfig.eye[0] = 0.0f;
   gRenderConfig.eye[1] = 0.0f;
-  gRenderConfig.eye[2] = 2.0f;
+  gRenderConfig.eye[2] = 1500.0f;
 
   gRenderConfig.look_at[0] = 0.0f;
   gRenderConfig.look_at[1] = 0.0f;
@@ -277,6 +283,8 @@ bool RunUI(const Mesh &mesh, const Image<float> &input_image) {
 
   gRenderConfig.width = 512;
   gRenderConfig.height = 512;
+
+  gRenderConfig.fov = 8.0f;
 
   gRenderConfig.max_passes = 1;
 
@@ -314,13 +322,14 @@ bool RunUI(const Mesh &mesh, const Image<float> &input_image) {
       trackball(gCurrQuat, 0.0f, 0.0f, 0.0f, 0.0f);
       gRenderConfig.eye[0] = 0.0f;
       gRenderConfig.eye[1] = 0.0f;
-      gRenderConfig.eye[2] = 2.0f;
+      gRenderConfig.eye[2] = 1500.0f;
       gRenderConfig.look_at[0] = 0.0f;
       gRenderConfig.look_at[1] = 0.0f;
       gRenderConfig.look_at[2] = 0.0f;
       gRenderConfig.up[0] = 0.0f;
       gRenderConfig.up[1] = 1.0f;
       gRenderConfig.up[2] = 0.0f;
+      gRenderConfig.fov = 8.0f;
 
       RequestRender();
     }
@@ -353,6 +362,17 @@ bool RunUI(const Mesh &mesh, const Image<float> &input_image) {
       ImGui::InputFloat2("show depth range", gUIParam.showDepthRange);
       ImGui::Checkbox("show depth pesudo color",
                       &gUIParam.showDepthPeseudoColor);
+
+      if (ImGui::InputFloat3("eye", gRenderConfig.eye)) {
+        RequestRender();
+      }
+      
+      if (ImGui::DragFloat2("UV offset", gRenderConfig.uv_offset, 0.001f, 0.0f, 1.0f)) {
+        RequestRender();
+      }
+      if (ImGui::DragFloat("fov", &(gRenderConfig.fov), 0.01f, 0.01f, 120.0f)) {
+        RequestRender();
+      }
     }
     ImGui::End();
 

@@ -1,13 +1,19 @@
-# PRNet inference in C++
+# PRNet inference in C++11
 
-PRNetInfer is an inference version of PRNet https://github.com/YadiraF/PRNet in Tensorflow C++ API.
+PRNetInfer is a C++11 port of PRNet https://github.com/YadiraF/PRNet in Tensorflow C++ API(Inference only).
+
+![](images/earing-result.jpg)
 
 ## Dependences
 
 * TensorFlow `r1.8` or later.
-* ProtocolBuffer compiler.
 * C++11 compiler.
 * CMake 3.5.1.
+
+## Supported platforms
+
+* [x] Ubuntu 16.04
+* [ ] Windows and macOS may work
 
 ## Setup TensorFlow
 
@@ -37,7 +43,7 @@ $ make
 
 ## Prepare freezed model of PRNet
 
-We first need to dump a graph.
+We first need to dump a graph from PRNet.
 
 In the function of `PosPrediction` in `predictor.py`, add the following code and run `run_basic.py` to get `trained_graph.pb`.
 
@@ -78,13 +84,14 @@ $ bazel-bin/tensorflow/python/tools/freeze_graph \
 
 Prepare 256x256 input image. Input image must contain face area by manual cropping(automatically crop face area using dlib is TODO)
 
-And here is an example of creating 256x256 pixel image using ImageMagick.
+Here is an example of creating 256x256 pixel image using ImageMagick.
+(Do not forget to append `!` to image extent)
 
 ```
 $ convert input.png -resize 256x256! image-256x256.png
 ```
 
-Then, run prnet-infer.
+Then, run prnet.
 
 ```
 $ ./prnet --graph ../freezed_graph.pb --data ../../PRNet/Data --image ../input.png
@@ -96,20 +103,24 @@ $ ./prnet --graph ../freezed_graph.pb --data ../../PRNet/Data --image ../input.p
 
 Wavefront .obj file will be written to `output.obj`.
 
-If you build `prnet-infer` with GUI support, you can view resulting mesh.
+If you build `prnet-infer` with GUI support(`WITH_GUI` in CMake option), you can view resulting mesh.
 
 ## TODO
 
-* Use dlib to automatically detect and crop face region.
-* Faster inference using GPU.
+* [ ] Use dlib to automatically detect and crop face region.
+* [ ] Faster inference using GPU.
+* [ ] Show landmark points.
 
 ## License
 
-MIT
+PRnetInfer source code is licensed under MIT license. Please see `LICENSE` for details.
+
+* girl_with_earlings-256.jpg : Public domain. https://en.wikipedia.org/wiki/Girl_with_a_Pearl_Earring
 
 ### Third party licenses
 
-* PRNet : MIT license.
-* NanoRT : MIT license.
-* ImGui : MIT license.
-* glfw : zlib/libpng license
+* PRNet : MIT license. https://github.com/YadiraF/PRNet
+* NanoRT : MIT license. https://github.com/lighttransport/nanort
+* ImGui : MIT license. https://github.com/ocornut/imgui 
+* glfw : zlib/libpng license http://www.glfw.org/
+

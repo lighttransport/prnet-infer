@@ -23,6 +23,9 @@ typedef struct {
   // Scene info
   float scene_scale = 1.0f;
 
+  // texture uv offset
+  float uv_offset[2] = {0.0f, 0.0f};
+
 } RenderConfig;
 
 /// Loads config from JSON file.
