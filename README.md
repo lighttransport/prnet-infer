@@ -45,7 +45,7 @@ $ make
 
 We first need to dump a graph from PRNet.
 
-In the function of `PosPrediction` in `predictor.py`, add the following code and run `run_basic.py` to get `trained_graph.pb`.
+At `PRnet` repo, in the function of `PosPrediction` in `predictor.py`, add the following code and run `run_basic.py` to get `trained_graph.pb`.
 
 ```py
 
@@ -76,7 +76,7 @@ Then freeze it with weight data like a following way.
 $ bazel-bin/tensorflow/python/tools/freeze_graph \
   --input_graph=../PRNet/trained_graph.pb \
   --input_checkpoint=../PRNet/Data/net-data/256_256_resfcn256_weight \
-  --input_binary=true --output_graph=../PRNet/frozen.pb \
+  --input_binary=true --output_graph=../PRNet/prnet_frozen.pb \
   --output_node_names=resfcn256/Conv2d_transpose_16/Sigmoid
 ```
 
@@ -91,14 +91,14 @@ Here is an example of creating 256x256 pixel image using ImageMagick.
 $ convert input.png -resize 256x256! image-256x256.png
 ```
 
-Then, run prnet.
+Then, run prnet like the following.
 
 ```
-$ ./prnet --graph ../freezed_graph.pb --data ../../PRNet/Data --image ../input.png
+$ ./prnet --graph ../../PRNet/prnet_frozen.pb --data ../../PRNet/Data --image ../input.png
 ```
 
 * `--image` specifies input image(must be 256x256 pixels and contains face region by manual cropping)
-* `--graph` specifies freezed graph file.
+* `--graph` specifies the freezed graph file.
 * `--data` specifies `Data` folder of PRNet repository.
 
 Wavefront .obj file will be written to `output.obj`.
