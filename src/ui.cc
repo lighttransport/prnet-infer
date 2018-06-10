@@ -380,10 +380,10 @@ static int CreateHDRTextureGL(const Image<float> &image, int prev_id = -1) {
   }
 
   if (prev_id < 0) {
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, format, GL_FLOAT,
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, int(width), int(height), 0, format, GL_FLOAT,
                  reinterpret_cast<const void *>(image.getData()));
   } else {
-    glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, width, height, format, GL_FLOAT,
+    glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, int(width), int(height), format, GL_FLOAT,
                     reinterpret_cast<const void *>(image.getData()));
   }
 
@@ -456,7 +456,7 @@ bool RunUI(const Mesh &mesh, const Image<float> &input_image,
   RequestRender();
 
   std::vector<int> debug_image_texs;
-  for (int i = 0; i < debug_images.size(); i++) {
+  for (size_t i = 0; i < debug_images.size(); i++) {
       const int id = CreateHDRTextureGL(debug_images[i]);
       debug_image_texs.push_back(id);
   }
@@ -541,13 +541,13 @@ bool RunUI(const Mesh &mesh, const Image<float> &input_image,
 
     ImGui::Begin("Debug Images");
     {
-        for (int i = 0; i < debug_image_texs.size(); i++) {
+        for (size_t i = 0; i < debug_image_texs.size(); i++) {
             // Show debug image
             const ImTextureID imgui_tex_id =reinterpret_cast<void *>(
                 static_cast<intptr_t>(static_cast<int>(debug_image_texs[i])));
-            const int img_width = debug_images[i].getWidth();
-            const int img_height = debug_images[i].getHeight();
-            const int width = ImGui::GetWindowHeight() - 10;
+            const int img_width = int(debug_images[i].getWidth());
+            const int img_height = int(debug_images[i].getHeight());
+            const int width = int(ImGui::GetWindowHeight()) - 10;
             const int height = img_height * width / img_width;
             ImGui::Image(imgui_tex_id, ImVec2(width, height), ImVec2(0, 0),
                          ImVec2(1,1), ImVec4(1, 1, 1, 1), ImVec4(1, 1, 1, 0.5));

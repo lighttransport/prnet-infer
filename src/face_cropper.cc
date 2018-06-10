@@ -1,10 +1,20 @@
 #include "face_cropper.h"
 
 #include <cassert>
+#include <cmath>
 
-#if USE_DLIB
+#ifdef USE_DLIB
+#ifdef __clang__
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Weverything"
+#endif
 #include <dlib/image_processing/frontal_face_detector.h>
 #include <dlib/gui_widgets.h>
+
+#ifdef __clang__
+#pragma clang diagnostic pop
+#endif
+
 #endif
 
 namespace prnet {
@@ -132,16 +142,16 @@ class FaceCropper::Impl {
 public:
   bool crop_dlib(const Image<float>& inp_img, Image<float>& out_img,
                  float* scale, float *shift_x, float *shift_y) {
-#if USE_DLIB
-    const int width = inp_img.getWidth();
-    const int height = inp_img.getHeight();
+#ifdef USE_DLIB
+    const int width = int(inp_img.getWidth());
+    const int height = int(inp_img.getHeight());
     assert(inp_img.getChannels() == 3);
 
     // Create dlib image
     dlib::array2d<unsigned char> dlib_img(height, width);
     inp_img.foreach ([&](int x, int y, const float *v) {
       // Gray scale
-      dlib_img[y][x] = (0.2126 * v[0] + 0.7152 * v[1] + 0.0722 * v[2]) * 255;
+      dlib_img[y][x] = static_cast<uint8_t>(clamp( (0.2126f * v[0] + 0.7152f * v[1] + 0.0722f * v[2]) * 255.0f, 0.0f, 255.0f));
     });
 
     // Detect
@@ -175,14 +185,20 @@ public:
 
       return true;
     }
+#else
+    (void)inp_img;
+    (void)out_img;
+    (void)scale;
+    (void)shift_x;
+    (void)shift_y;
 #endif
     return false;
   }
 
   bool crop_center(const Image<float>& inp_img, Image<float>& out_img,
                    float* scale, float *shift_x, float *shift_y) {
-    const int width = inp_img.getWidth();
-    const int height = inp_img.getHeight();
+    const int width = int(inp_img.getWidth());
+    const int height = int(inp_img.getHeight());
 
     // In non dlib path, PRNet crops image from image center with x1.6 scaling
     // (minify) then revert it by (1/1.6) scaling.
@@ -214,7 +230,7 @@ public:
   }
 
 private:
-#if USE_DLIB
+#ifdef USE_DLIB
   dlib::frontal_face_detector detector = dlib::get_frontal_face_detector();
 #endif
 };

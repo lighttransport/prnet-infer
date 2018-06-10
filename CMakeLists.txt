@@ -112,9 +112,12 @@ link_directories(
     ${TENSORFLOW_BUILD_DIR}
     )
 
+if (WITH_DLIB)
+  list(APPEND PRNET_INFER_EXT_LIBS dlib)
+endif (WITH_DLIB)
+
 add_executable( prnet
     ${CORE_SOURCE}
-    ${DLIB_SOURCE}
     ${PRNET_INFER_GUI_SOURCE}
     )
 
@@ -134,7 +137,7 @@ target_include_directories(prnet
 )
 
 if (WITH_GUI)
-  set(PRNET_INFER_EXT_LIBS glfw)
+  list(APPEND PRNET_INFER_EXT_LIBS glfw)
 
   # Required GL libraries on various platforms
   if (WIN32)

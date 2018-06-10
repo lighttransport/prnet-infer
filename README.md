@@ -41,6 +41,19 @@ $ cd build
 $ make
 ```
 
+### Use dlib
+
+With dlib, it can automatically detect and crop face region of input image.
+
+Clone dlib with git submodule.
+
+```
+$ git submodule update --init
+```
+
+Then enable `WITH_DLIB` in CMake option.
+
+
 ## Prepare freezed model of PRNet
 
 We first need to dump a graph from PRNet.

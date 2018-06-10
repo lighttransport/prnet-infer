@@ -345,9 +345,10 @@ static void DrawLandmark(const Image<float> &cropped_img,
         if (radius < float(rx * rx + ry * ry)) {
             continue;
         }
-        out_img->fetch(x + rx, y + ry, 0) = 0;
-        out_img->fetch(x + rx, y + ry, 1) = 255;
-        out_img->fetch(x + rx, y + ry, 2) = 0;
+        
+        out_img->fetch(size_t(x + rx), size_t(y + ry), 0) = 0;
+        out_img->fetch(size_t(x + rx), size_t(y + ry), 1) = 255;
+        out_img->fetch(size_t(x + rx), size_t(y + ry), 2) = 0;
       }
     }
   }

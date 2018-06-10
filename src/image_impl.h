@@ -50,8 +50,9 @@ void Image<T>::foreach(const std::function<void(int, int, const T*)> &func,
   std::atomic<int> i(0);
   for (uint32_t t = 0; t < n_threads; t++) {
     workers.emplace_back(std::thread([&, t]() {
+      (void)t;
       size_t y = 0;
-      while ((y = i++) < height) {
+      while ((y = size_t(i++)) < height) {
         for (size_t x = 0; x < width; x++) {
           func(int(x), int(y), &data[(y * width + x) * channels]);
         }
