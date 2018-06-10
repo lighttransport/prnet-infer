@@ -14,15 +14,16 @@
 #pragma clang diagnostic pop
 #endif
 
-#include "face_cropper.h"
-#include "tf_predictor.h"
 
 #ifdef USE_GUI
 #include "ui.h"
 #endif
 
+#include "face_cropper.h"
+#include "tf_predictor.h"
 #include "face-data.h"
 #include "mesh.h"
+#include "face_frontalizer.h"
 
 #include <chrono>
 #include <fstream>
@@ -463,9 +464,14 @@ int main(int argc, char **argv) {
   DrawLandmark(cropped_img, pos_img, face_data, &dbg_lmk_image);
   SaveImage("landmarks.jpg", dbg_lmk_image);
 
+  // Frontizlization
+  Mesh front_mesh = mesh;  // copy
+  FrontalizeFaceMesh(&front_mesh, face_data);
+  SaveAsWObj("output_front.obj", front_mesh);
+
 #ifdef USE_GUI
   std::vector<Image<float>> debug_images = {dbg_lmk_image};
-  bool ret = RunUI(mesh, cropped_img, debug_images);
+  bool ret = RunUI(mesh, front_mesh, cropped_img, debug_images);
   if (!ret) {
     std::cerr << "failed to run GUI." << std::endl;
   }

@@ -392,7 +392,8 @@ static int CreateHDRTextureGL(const Image<float> &image, int prev_id = -1) {
   return static_cast<int>(id);
 }
 
-bool RunUI(const Mesh &mesh, const Image<float> &input_image,
+bool RunUI(const Mesh &mesh, const Mesh &front_mesh,
+           const Image<float> &input_image,
            const std::vector<Image<float>> &debug_images) {
   // Setup window
   glfwSetErrorCallback(error_callback);
@@ -463,6 +464,7 @@ bool RunUI(const Mesh &mesh, const Image<float> &input_image,
 
   // Main loop
   double mouse_x = 0, mouse_y = 0;
+  bool use_front_mesh = false;
   while (!glfwWindowShouldClose(window)) {
     glfwPollEvents();
     ImGui_ImplGlfwGL2_NewFrame();
@@ -536,6 +538,19 @@ bool RunUI(const Mesh &mesh, const Image<float> &input_image,
       if (ImGui::DragFloat("fov", &(gRenderConfig.fov), 0.01f, 0.01f, 120.0f)) {
         RequestRender();
       }
+
+      if (ImGui::Checkbox("frontalized mesh", &use_front_mesh)) {
+        // Switch mesh
+        if (use_front_mesh) {
+          gRenderer.SetMesh(front_mesh);
+          gRenderer.BuildBVH();
+        } else {
+          gRenderer.SetMesh(mesh);
+          gRenderer.BuildBVH();
+        }
+        RequestRender();
+      }
+
     }
     ImGui::End();
 

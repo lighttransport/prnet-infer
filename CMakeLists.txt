@@ -20,9 +20,6 @@ if (WITH_DLIB)
   add_subdirectory(${CMAKE_SOURCE_DIR}/src/dlib)
   include_directories(${CMAKE_SOURCE_DIR}/src/dlib)
   add_definitions("-DUSE_DLIB=1")
-  set (DLIB_SOURCE
-      ${CMAKE_SOURCE_DIR}/src/dlib/dlib/all/source.cpp
-      )
 endif (WITH_DLIB)
 
 if (WITH_GUI)
@@ -105,6 +102,7 @@ set (CORE_SOURCE
     ${CMAKE_SOURCE_DIR}/src/main.cc
     ${CMAKE_SOURCE_DIR}/src/tf_predictor.cc
     ${CMAKE_SOURCE_DIR}/src/face_cropper.cc
+    ${CMAKE_SOURCE_DIR}/src/face_frontalizer.cc
     ${CMAKE_SOURCE_DIR}/src/face-data.cc
     )
 
