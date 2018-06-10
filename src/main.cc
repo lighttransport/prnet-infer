@@ -49,8 +49,8 @@ static bool LoadImage(const std::string &filename, Image<float> &image) {
   image.create(size_t(width), size_t(height), size_t(channels));
   image.foreach ([&](int x, int y, int c, float &v) {
     v = static_cast<float>(data[(y * width + x) * channels + c]) / 255.f;
-    // TODO(LTE): Do we need degamma?
-    // v = std::pow(v, 2.2f);
+    // TODO(LTE): Do we really need degamma?
+    v = std::pow(v, 2.2f);
   });
 
   // Free
@@ -558,7 +558,7 @@ int main(int argc, char **argv) {
   Image<float> texture;
   bool has_texture = CreateTexture(inp_img, pos_img, &texture);
   if (has_texture) {
-    SaveImage("texture.jpg", texture);
+    SaveImage("texture.jpg", texture); // in linear space.
   }
 
   SaveAsWObj("output.obj", mesh);

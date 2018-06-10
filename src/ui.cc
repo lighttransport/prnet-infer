@@ -1,6 +1,9 @@
 // UI loop
 
 #include "ui.h"
+
+#include "stb_image_write.h"
+
 #include "gui/render-buffer.h"
 #include "gui/render.h"
 #include "gui/trackball.h"
@@ -16,7 +19,7 @@
 namespace prnet {
 
 struct UIParameters {
-  float showDepthRange[2] = {1400.0f, 1700.0f}; // Good for fov 8
+  float showDepthRange[2] = {1400.0f, 1700.0f};  // Good for fov 8
   bool showDepthPeseudoColor = false;
   int showBufferMode = example::SHOW_BUFFER_COLOR;
 };
@@ -43,6 +46,93 @@ static std::mutex gMutex;
 #ifdef __clang__
 #pragma clang diagnostic pop
 #endif
+
+template <typename T>
+inline T clamp(T f, T fmin, T fmax) {
+  return std::max(std::min(fmax, f), fmin);
+}
+
+//
+// Assume pixel values are basially in the range of [0.0, 1.0].
+//
+static bool SaveRGBAImageAsPNG(const std::string &filename,
+                               const std::vector<float> &src, int width,
+                               int height, bool gamma) {
+  std::vector<uint8_t> image;
+
+  image.resize(size_t(width * height) * 3);
+
+  for (size_t y = 0; y < size_t(height); y++) {
+    for (size_t x = 0; x < size_t(width); x++) {
+      size_t dst_idx = (size_t(height) - y - 1) * size_t(width) + x; // flip Y
+      size_t src_idx = y * size_t(width) + x;
+      if (gamma) {
+        // apply gamma correction
+        image[3 * dst_idx + 0] = static_cast<uint8_t>(
+            clamp(std::pow(src[4 * src_idx + 0], 1.0f / 2.2f) * 255.0f, 0.0f, 255.0f));
+        image[3 * dst_idx + 1] = static_cast<uint8_t>(
+            clamp(std::pow(src[4 * src_idx + 1], 1.0f / 2.2f) * 255.0f, 0.0f, 255.0f));
+        image[3 * dst_idx + 2] = static_cast<uint8_t>(
+            clamp(std::pow(src[4 * src_idx + 2], 1.0f / 2.2f) * 255.0f, 0.0f, 255.0f));
+      } else {
+        // linear
+        image[3 * dst_idx + 0] =
+            static_cast<uint8_t>(clamp(src[4 * src_idx + 0] * 255.0f, 0.0f, 255.0f));
+        image[3 * dst_idx + 1] =
+            static_cast<uint8_t>(clamp(src[4 * src_idx + 1] * 255.0f, 0.0f, 255.0f));
+        image[3 * dst_idx + 2] =
+            static_cast<uint8_t>(clamp(src[4 * src_idx + 2] * 255.0f, 0.0f, 255.0f));
+      }
+    }
+  }
+
+  // Save
+  int ret = stbi_write_png(filename.c_str(), width, height, 3, &image.at(0),
+                           /* stride_in_bytes */ width * 3);
+
+  return (ret > 0) ? true : false;
+}
+
+static void SaveBuffers(const example::RenderBuffer &buffer, int width, int height) {
+  std::string color_filename = "buffer_color.png";
+  std::string texture_filename = "buffer_texture.png";
+  std::string normal_filename = "buffer_normal.png";
+
+  if (!SaveRGBAImageAsPNG(color_filename, buffer.rgba, width, height,
+                          /* gamma */ true)) {
+    std::cerr << "Failed to write " << color_filename << std::endl;
+  } else {
+    std::cout << "Wrote " << color_filename << std::endl;
+  }
+  
+
+  if (!SaveRGBAImageAsPNG(texture_filename, buffer.rgba, width, height,
+                          /* gamma */ true)) {
+    std::cerr << "Failed to write " << texture_filename << std::endl;
+  } else {
+    std::cout << "Wrote " << texture_filename << std::endl;
+  }
+
+  {
+    std::vector<float> normal;
+    normal.resize(size_t(width * height) * 4);
+
+    for (size_t i = 0; i < size_t(width * height); i++) {
+      // [-1, 1] -> [0, 1]
+      normal[4 * i + 0] = buffer.normal[4 * i + 0] * 0.5f + 0.5f;
+      normal[4 * i + 1] = buffer.normal[4 * i + 1] * 0.5f + 0.5f;
+      normal[4 * i + 2] = buffer.normal[4 * i + 2] * 0.5f + 0.5f;
+      normal[4 * i + 3] = 1.0f;  // not used
+    }
+
+    if (!SaveRGBAImageAsPNG(normal_filename, normal, width, height,
+                            /* gamma */ false)) {
+      std::cerr << "Failed to write " << normal_filename << std::endl;
+    } else {
+      std::cout << "Wrote " << normal_filename << std::endl;
+    }
+  }
+}
 
 static void RequestRender() {
   {
@@ -71,7 +161,7 @@ static void RenderThread() {
       continue;
     }
 
-    //auto startT = std::chrono::system_clock::now();
+    // auto startT = std::chrono::system_clock::now();
 
     // Initialize display buffer for the first pass.
     bool initial_pass = false;
@@ -82,19 +172,21 @@ static void RenderThread() {
       }
     }
 
-    bool ret = gRenderer.Render(&gRenderBuffer, gCurrQuat, gRenderConfig);
-
-    if (ret) {
+    {
       std::lock_guard<std::mutex> guard(gMutex);
+      bool ret = gRenderer.Render(&gRenderBuffer, gCurrQuat, gRenderConfig);
 
-      gRenderConfig.pass++;
+      if (ret) {
+
+        gRenderConfig.pass++;
+      }
     }
 
-    //auto endT = std::chrono::system_clock::now();
+    // auto endT = std::chrono::system_clock::now();
 
     gRenderRefresh = false;
 
-    //std::chrono::duration<double, std::milli> ms = endT - startT;
+    // std::chrono::duration<double, std::milli> ms = endT - startT;
     // std::cout << ms.count() << " [ms]\n";
   }
 }
@@ -131,15 +223,15 @@ inline float pseudoColor(float v, int ch) {
 }
 
 static void Display(int width, int height, int buffer_mode,
-             const example::RenderBuffer &buffer) {
+                    const example::RenderBuffer &buffer) {
   std::vector<float> buf(size_t(width * height * 4));
   if (buffer_mode == example::SHOW_BUFFER_COLOR) {
     // TODO: normalize
     for (size_t i = 0; i < buf.size() / 4; i++) {
-      buf[4 * i + 0] = buffer.rgba[4 * i + 0];
-      buf[4 * i + 1] = buffer.rgba[4 * i + 1];
-      buf[4 * i + 2] = buffer.rgba[4 * i + 2];
-      buf[4 * i + 3] = buffer.rgba[4 * i + 3];
+      buf[4 * i + 0] = std::pow(buffer.rgba[4 * i + 0], 1.0f / 2.2f);
+      buf[4 * i + 1] = std::pow(buffer.rgba[4 * i + 1], 1.0f / 2.2f);
+      buf[4 * i + 2] = std::pow(buffer.rgba[4 * i + 2], 1.0f / 2.2f);
+      buf[4 * i + 3] = buffer.rgba[4 * i + 3]; // no gamma correction for alpha
     }
   } else if (buffer_mode == example::SHOW_BUFFER_NORMAL) {
     for (size_t i = 0; i < buf.size(); i++) {
@@ -164,12 +256,18 @@ static void Display(int width, int height, int buffer_mode,
       }
     }
   } else if (buffer_mode == example::SHOW_BUFFER_TEXCOORD) {
-    for (size_t i = 0; i < buf.size(); i++) {
-      buf[i] = buffer.texcoord[i];
+    for (size_t i = 0; i < buf.size() / 4; i++) {
+      buf[4 * i + 0] = std::pow(buffer.texcoord[4 * i + 0], 1.0f / 2.2f);
+      buf[4 * i + 1] = std::pow(buffer.texcoord[4 * i + 1], 1.0f / 2.2f);
+      buf[4 * i + 2] = std::pow(buffer.texcoord[4 * i + 2], 1.0f / 2.2f);
+      buf[4 * i + 3] = buffer.rgba[4 * i + 3]; // no gamma correction for alpha
     }
   } else if (buffer_mode == example::SHOW_BUFFER_DIFFUSE) {
-    for (size_t i = 0; i < buf.size(); i++) {
-      buf[i] = buffer.diffuse[i];
+    for (size_t i = 0; i < buf.size() / 4; i++) {
+      buf[4 * i + 0] = std::pow(buffer.diffuse[4 * i + 0], 1.0f / 2.2f);
+      buf[4 * i + 1] = std::pow(buffer.diffuse[4 * i + 1], 1.0f / 2.2f);
+      buf[4 * i + 2] = std::pow(buffer.diffuse[4 * i + 2], 1.0f / 2.2f);
+      buf[4 * i + 3] = buffer.diffuse[4 * i + 2];
     }
   }
 
@@ -181,8 +279,7 @@ static void Display(int width, int height, int buffer_mode,
 static void HandleUserInput(GLFWwindow *window, const double view_width,
                             const double view_height, double *prev_mouse_x,
                             double *prev_mouse_y) {
-
-  ImGuiIO& io = ImGui::GetIO();
+  ImGuiIO &io = ImGui::GetIO();
   if (io.WantCaptureMouse || io.WantCaptureKeyboard) {
     return;
   }
@@ -197,7 +294,7 @@ static void HandleUserInput(GLFWwindow *window, const double view_width,
 
   int window_width, window_height;
   glfwGetWindowSize(window, &window_width, &window_height);
-  //const double width = static_cast<double>(window_width);
+  // const double width = static_cast<double>(window_width);
   const double height = static_cast<double>(window_height);
 
   const double kTransScale = 0.05;
@@ -229,10 +326,11 @@ static void HandleUserInput(GLFWwindow *window, const double view_width,
       // Assume render view is located in lower-left.
       double offset_y = height - view_height;
 
-      trackball(gPrevQuat, float((2.0 * (*prev_mouse_x) - view_width) / view_width),
-                float((height - 2.0 * ((*prev_mouse_y) - offset_y)) / view_height),
-                float((2.0 * mouse_x - view_width) / view_width),
-                float((height - 2.0 * (mouse_y - offset_y)) / view_height));
+      trackball(
+          gPrevQuat, float((2.0 * (*prev_mouse_x) - view_width) / view_width),
+          float((height - 2.0 * ((*prev_mouse_y) - offset_y)) / view_height),
+          float((2.0 * mouse_x - view_width) / view_width),
+          float((height - 2.0 * (mouse_y - offset_y)) / view_height));
       add_quats(gPrevQuat, gCurrQuat, gCurrQuat);
 
       RequestRender();
@@ -251,7 +349,8 @@ bool RunUI(const Mesh &mesh, const Image<float> &input_image) {
     std::cerr << "Failed to initialize glfw" << std::endl;
     return false;
   }
-  GLFWwindow *window = glfwCreateWindow(1280, 720, "PRNet infer", nullptr, nullptr);
+  GLFWwindow *window =
+      glfwCreateWindow(1280, 720, "PRNet infer", nullptr, nullptr);
   glfwMakeContextCurrent(window);
   glfwSwapInterval(1);  // Enable vsync
 
@@ -288,7 +387,8 @@ bool RunUI(const Mesh &mesh, const Image<float> &input_image) {
 
   gRenderConfig.max_passes = 1;
 
-  gRenderBuffer.resize(size_t(gRenderConfig.width), size_t(gRenderConfig.height));
+  gRenderBuffer.resize(size_t(gRenderConfig.width),
+                       size_t(gRenderConfig.height));
 
   trackball(gCurrQuat, 0.0f, 0.0f, 0.0f, 0.0f);
 
@@ -341,6 +441,11 @@ bool RunUI(const Mesh &mesh, const Image<float> &input_image) {
     // ImGui
     ImGui::Begin("UI");
     {
+      if (ImGui::Button("Save buffers")) {
+        std::lock_guard<std::mutex> guard(gMutex);
+        SaveBuffers(gRenderBuffer, gRenderConfig.width, gRenderConfig.height);
+      }
+
       ImGui::RadioButton("color", &(gUIParam.showBufferMode),
                          example::SHOW_BUFFER_COLOR);
       ImGui::SameLine();
@@ -366,8 +471,9 @@ bool RunUI(const Mesh &mesh, const Image<float> &input_image) {
       if (ImGui::InputFloat3("eye", gRenderConfig.eye)) {
         RequestRender();
       }
-      
-      if (ImGui::DragFloat2("UV offset", gRenderConfig.uv_offset, 0.001f, 0.0f, 1.0f)) {
+
+      if (ImGui::DragFloat2("UV offset", gRenderConfig.uv_offset, 0.001f, 0.0f,
+                            1.0f)) {
         RequestRender();
       }
       if (ImGui::DragFloat("fov", &(gRenderConfig.fov), 0.01f, 0.01f, 120.0f)) {
@@ -387,8 +493,8 @@ bool RunUI(const Mesh &mesh, const Image<float> &input_image) {
             gRenderBuffer);
 
     // ImGui Display
-    // glUseProgram(0); // You may want this if using this code in an OpenGL 3+
-    // context where shaders may be bound, but prefer using the GL3+ code.
+    // glUseProgram(0); // You may want this if using this code in an OpenGL
+    // 3+ context where shaders may be bound, but prefer using the GL3+ code.
     ImGui::Render();
     ImGui_ImplGlfwGL2_RenderDrawData(ImGui::GetDrawData());
     glfwSwapBuffers(window);
