@@ -34,33 +34,6 @@ namespace prnet {
 
 namespace {
 
-#if 0 
-
-static Status ReadEntireFile(tensorflow::Env* env, const string& filename,
-                      Tensor* output) {
-  tensorflow::uint64 file_size = 0;
-  TF_RETURN_IF_ERROR(env->GetFileSize(filename, &file_size));
-
-  string contents;
-  contents.resize(file_size);
-
-  std::unique_ptr<tensorflow::RandomAccessFile> file;
-  TF_RETURN_IF_ERROR(env->NewRandomAccessFile(filename, &file));
-
-  tensorflow::StringPiece data;
-  TF_RETURN_IF_ERROR(file->Read(0, file_size, &data, &(contents)[0]));
-  if (data.size() != file_size) {
-    return tensorflow::errors::DataLoss("Truncated read of '", filename,
-                                        "' expected ", file_size, " got ",
-                                        data.size());
-  }
-  output->scalar<string>()() = data.ToString();
-  return Status::OK();
-}
-
-#endif
-
-
 // Reads a model graph definition from disk, and creates a session object you
 // can use to run it.
 Status LoadGraph(const string& graph_file_name,

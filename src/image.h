@@ -38,6 +38,10 @@ public:
   const T& fetch(size_t x, size_t y, size_t c = 0) const;
   T& fetch(size_t x, size_t y, size_t c = 0);
 
+  void foreach(const std::function<void(int x, int y ,T* v)> &func,
+               uint32_t n_threads = DEFAULT_HW_CONCURRENCY);
+  void foreach(const std::function<void(int x, int y, const T* v)> &func,
+               uint32_t n_threads = DEFAULT_HW_CONCURRENCY) const;
   void foreach(const std::function<void(int x, int y , int c, T& v)> &func,
                uint32_t n_threads = DEFAULT_HW_CONCURRENCY);
   void foreach(const std::function<void(int x, int y, int c, const T& v)> &func,

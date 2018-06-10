@@ -17,7 +17,12 @@ find_package(Sanitizers) # Address sanitizer.
 find_package(Threads)
 
 if (WITH_DLIB)
+  add_subdirectory(${CMAKE_SOURCE_DIR}/src/dlib)
+  include_directories(${CMAKE_SOURCE_DIR}/src/dlib)
   add_definitions("-DUSE_DLIB=1")
+  set (DLIB_SOURCE
+      ${CMAKE_SOURCE_DIR}/src/dlib/dlib/all/source.cpp
+      )
 endif (WITH_DLIB)
 
 if (WITH_GUI)
@@ -94,12 +99,12 @@ set (CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 include_directories(
     ${CMAKE_SOURCE_DIR}/src
-    
 )
 
 set (CORE_SOURCE
     ${CMAKE_SOURCE_DIR}/src/main.cc
     ${CMAKE_SOURCE_DIR}/src/tf_predictor.cc
+    ${CMAKE_SOURCE_DIR}/src/face_cropper.cc
     ${CMAKE_SOURCE_DIR}/src/face-data.cc
     )
 
@@ -109,6 +114,7 @@ link_directories(
 
 add_executable( prnet
     ${CORE_SOURCE}
+    ${DLIB_SOURCE}
     ${PRNET_INFER_GUI_SOURCE}
     )
 

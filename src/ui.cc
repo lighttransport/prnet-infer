@@ -342,7 +342,58 @@ static void HandleUserInput(GLFWwindow *window, const double view_width,
   *prev_mouse_y = mouse_y;
 }
 
-bool RunUI(const Mesh &mesh, const Image<float> &input_image) {
+static int CreateHDRTextureGL(const Image<float> &image, int prev_id = -1) {
+  const size_t width = image.getWidth();
+  const size_t height = image.getHeight();
+  const size_t n_channel = image.getChannels();
+
+  GLuint id;
+  if (prev_id < 0) {
+    // Generate new texture
+    glGenTextures(1, &id);
+  } else {
+    // Using previous texture
+    id = static_cast<GLuint>(prev_id);
+  }
+
+  GLint last_texture;
+  glGetIntegerv(GL_TEXTURE_BINDING_2D, &last_texture);
+
+  glBindTexture(GL_TEXTURE_2D, id);
+  // glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+  // glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+
+  GLenum format = GL_RGBA;
+  if (n_channel == 1) {
+    format = GL_LUMINANCE;
+  } else if (n_channel == 2) {
+    format = GL_LUMINANCE_ALPHA;
+  } else if (n_channel == 3) {
+    format = GL_RGB;
+  } else if (n_channel == 4) {
+    format = GL_RGBA;
+  } else {
+    std::cerr << "Unknown the number of channels" << std::endl;
+    return prev_id;
+  }
+
+  if (prev_id < 0) {
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, format, GL_FLOAT,
+                 reinterpret_cast<const void *>(image.getData()));
+  } else {
+    glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, width, height, format, GL_FLOAT,
+                    reinterpret_cast<const void *>(image.getData()));
+  }
+
+  glBindTexture(GL_TEXTURE_2D, static_cast<GLuint>(last_texture));
+
+  return static_cast<int>(id);
+}
+
+bool RunUI(const Mesh &mesh, const Image<float> &input_image,
+           const std::vector<Image<float>> &debug_images) {
   // Setup window
   glfwSetErrorCallback(error_callback);
   if (!glfwInit()) {
@@ -403,6 +454,12 @@ bool RunUI(const Mesh &mesh, const Image<float> &input_image) {
 
   // trigger first rendering
   RequestRender();
+
+  std::vector<int> debug_image_texs;
+  for (int i = 0; i < debug_images.size(); i++) {
+      const int id = CreateHDRTextureGL(debug_images[i]);
+      debug_image_texs.push_back(id);
+  }
 
   // Main loop
   double mouse_x = 0, mouse_y = 0;
@@ -479,6 +536,22 @@ bool RunUI(const Mesh &mesh, const Image<float> &input_image) {
       if (ImGui::DragFloat("fov", &(gRenderConfig.fov), 0.01f, 0.01f, 120.0f)) {
         RequestRender();
       }
+    }
+    ImGui::End();
+
+    ImGui::Begin("Debug Images");
+    {
+        for (int i = 0; i < debug_image_texs.size(); i++) {
+            // Show debug image
+            const ImTextureID imgui_tex_id =reinterpret_cast<void *>(
+                static_cast<intptr_t>(static_cast<int>(debug_image_texs[i])));
+            const int img_width = debug_images[i].getWidth();
+            const int img_height = debug_images[i].getHeight();
+            const int width = ImGui::GetWindowHeight() - 10;
+            const int height = img_height * width / img_width;
+            ImGui::Image(imgui_tex_id, ImVec2(width, height), ImVec2(0, 0),
+                         ImVec2(1,1), ImVec4(1, 1, 1, 1), ImVec4(1, 1, 1, 0.5));
+        }
     }
     ImGui::End();
 

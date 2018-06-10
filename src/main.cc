@@ -14,6 +14,7 @@
 #pragma clang diagnostic pop
 #endif
 
+#include "face_cropper.h"
 #include "tf_predictor.h"
 
 #ifdef USE_GUI
@@ -79,115 +80,6 @@ static bool SaveImage(const std::string &filename, Image<float> &image, const fl
 }
 
 // --------------------------------
-
-inline void FilterFloat(float *rgba, const float *image, int i00, int i10,
-                        int i01, int i11,
-                        float w[4],  // weight
-                        int channels) {
-  float texel[4][4];
-
-  rgba[0] = rgba[1] = rgba[2] = 0.0f;
-
-  // Filter in linear space
-  for (int i = 0; i < channels; i++) {
-    texel[0][i] = image[i00 + i];
-    texel[1][i] = image[i10 + i];
-    texel[2][i] = image[i01 + i];
-    texel[3][i] = image[i11 + i];
-  }
-
-  for (int i = 0; i < channels; i++) {
-    rgba[i] = w[0] * texel[0][i] + w[1] * texel[1][i] + w[2] * texel[2][i] +
-              w[3] * texel[3][i];
-  }
-
-  if (channels < 4) {
-    rgba[3] = 1.0;
-  }
-}
-
-// Fetch texture with bilinear filtering.
-static void FetchTexture(const float u, const float v, int width, int height,
-                         int components, const float *image, float *rgba) {
-  // clamp to edge
-  if ((u < 0.0f) || (u >= 1.0f) || (v < 0.0f) || (v >= 1.0f)) {
-    rgba[0] = 0.0f;
-    rgba[1] = 0.0f;
-    rgba[2] = 0.0f;
-    rgba[3] = 0.0f;
-    return;
-  }
-
-  float sx = std::floor(u);
-  float sy = std::floor(v);
-
-  float uu = u - sx;
-  float vv = v - sy;
-
-  // clamp
-  uu = clamp(uu, 0.0f, 1.0f);
-  vv = clamp(vv, 0.0f, 1.0f);
-
-  float px = (width - 1) * uu;
-  float py = (height - 1) * vv;
-
-  int x0 = int(px);
-  int y0 = int(py);
-  int x1 = ((x0 + 1) >= width) ? (width - 1) : (x0 + 1);
-  int y1 = ((y0 + 1) >= height) ? (height - 1) : (y0 + 1);
-
-  float dx = px - float(x0);
-  float dy = py - float(y0);
-
-  float w[4];
-
-  w[0] = (1.0f - dx) * (1.0f - dy);
-  w[1] = (1.0f - dx) * (dy);
-  w[2] = (dx) * (1.0f - dy);
-  w[3] = (dx) * (dy);
-
-  int i00 = components * (y0 * width + x0);
-  int i01 = components * (y0 * width + x1);
-  int i10 = components * (y1 * width + x0);
-  int i11 = components * (y1 * width + x1);
-
-  FilterFloat(rgba, image, i00, i10, i01, i11, w, components);
-}
-
-//
-// Crop an image with bilinear filtering.
-// pixel bounding box is defined in (xs, ys) - (xe, ye)
-// bounding box range is in (0, 0) x (width-1, height-1)
-//
-static void CropImage(const Image<float> &in_img, int xs, int xe, int ys,
-                      int ye, Image<float> *out_img) {
-  size_t width = in_img.getWidth();
-  size_t height = in_img.getHeight();
-  size_t channels = in_img.getChannels();
-
-  out_img->create(width, height, channels);
-
-  if ((xs == xe) || (ys == ye)) {
-    return;
-  }
-
-  const float *src = in_img.getData();
-  float *dst = out_img->getData();
-
-  for (size_t y = 0; y < height; y++) {
-    float v = (ys + 0.5f + (y / float(height)) * (ye - ys + 1)) / float(height);
-    for (size_t x = 0; x < width; x++) {
-      float u = (xs + 0.5f + (x / float(width)) * (xe - xs + 1)) / float(width);
-
-      float rgba[4];
-      FetchTexture(u, v, int(width), int(height), int(channels), src, rgba);
-
-      for (size_t c = 0; c < channels; c++) {
-        dst[channels * (y * width + x) + c] = rgba[c];
-      }
-    }
-  }
-}
 
 // Create texture map from 3D position map
 static bool CreateTexture(const Image<float> &image, const Image<float> &posmap,
@@ -409,7 +301,8 @@ static bool SaveAsWObj(const std::string &filename, prnet::Mesh &mesh) {
 }
 
 // Restore position coordinate.
-static void RestorePositionMap(Image<float> *pos_img, const float crop_scaling_factor, const float xy_offset[2]) {
+static void RemapPosition(Image<float> *pos_img, const float scale,
+                          const float shift_x, const float shift_y) {
 
   size_t n = pos_img->getWidth() * pos_img->getHeight();
 
@@ -428,9 +321,35 @@ static void RestorePositionMap(Image<float> *pos_img, const float crop_scaling_f
     float y = pos_img->getData()[3 * i + 1];
     float z = pos_img->getData()[3 * i + 2];
 
-    pos_img->getData()[3 * i + 0] = x * crop_scaling_factor + xy_offset[0];
-    pos_img->getData()[3 * i + 1] = y * crop_scaling_factor + xy_offset[1];
-    pos_img->getData()[3 * i + 2] = z * crop_scaling_factor; // TODO(LTE): Do we need z offset?
+    pos_img->getData()[3 * i + 0] = x * scale + shift_x;
+    pos_img->getData()[3 * i + 1] = y * scale + shift_y;
+    pos_img->getData()[3 * i + 2] = z * scale; // TODO(LTE): Do we need z offset?
+  }
+}
+
+static void DrawLandmark(const Image<float> &cropped_img,
+                         const Image<float> &pos_img,
+                         const FaceData& face_data,
+                         Image<float> *out_img, float radius = 1.f) {
+  *out_img = cropped_img;  // copy
+  const size_t n_pt = face_data.uv_kpt_indices.size() / 2;
+  const int ksize = int(std::ceil(radius));
+  for (size_t i = 0; i < n_pt; i++) {
+    const uint32_t x_idx = face_data.uv_kpt_indices[i];
+    const uint32_t y_idx = face_data.uv_kpt_indices[i + n_pt];
+    const int x = int(pos_img.fetch(x_idx, y_idx, 0));
+    const int y = int(pos_img.fetch(x_idx, y_idx, 1));
+    // Draw circle
+    for (int rx = -ksize; rx <= ksize; rx++) {
+      for (int ry = -ksize; ry <= ksize; ry++) {
+        if (radius < float(rx * rx + ry * ry)) {
+            continue;
+        }
+        out_img->fetch(x + rx, y + ry, 0) = 0;
+        out_img->fetch(x + rx, y + ry, 1) = 255;
+        out_img->fetch(x + rx, y + ry, 2) = 0;
+      }
+    }
   }
 }
 
@@ -480,44 +399,25 @@ int main(int argc, char **argv) {
     return -1;
   }
 
-  // Crop Image.
-  Image<float> cropped_img;
-  float crop_scaling_factor =
-      -1.0f;  // should be filled in the following clause.
-  {
-    float width = float(inp_img.getWidth());
-    float height = float(inp_img.getHeight());
-
-    // In non dlib path, PRNet crops image from image center with x1.6 scaling
-    // (minify) then revert it by (1/1.6) scaling.
-    // (See PRNet's api.py::PRN::process for details)
-    float scale = 1.6f;
-    float center[2] = {width / 2.0f - 0.5f, height / 2.0f - 0.5f};
-
-    int region[4];
-    region[0] = int(center[0] - (width / 2.0f) / (1.0f / scale));
-    region[1] = int(center[0] + (width / 2.0f) / (1.0f / scale));
-    region[2] = int(center[1] - (height / 2.0f) / (1.0f / scale));
-    region[3] = int(center[1] + (height / 2.0f) / (1.0f / scale));
-
-    std::cout << "region " << region[0] << ", " << region[1] << ", "
-              << region[2] << ", " << region[3] << std::endl;
-
-    CropImage(inp_img, region[0], region[1], region[2], region[3],
-              &cropped_img);
-
-    SaveImage("dbg_cropped_img.jpg", cropped_img);
-
-    crop_scaling_factor = scale;
-  }
-  assert(crop_scaling_factor > 0.0f);
-
+  // Meshing
   FaceData face_data;
-
-  // Load face data
   if (!LoadFaceData("../Data/uv-data", &face_data)) {
     return -1;
   }
+
+  // Crop Image.
+  Image<float> cropped_img;
+  FaceCropper cropper;
+  float crop_scale = 1.f, crop_shift_x = 0.f, crop_shift_y = 0.f;
+  bool dlib_ret = cropper.crop_dlib(inp_img, cropped_img, &crop_scale,
+                                    &crop_shift_x, &crop_shift_y);
+  if (!dlib_ret) {
+    std::cout << "Failed to detect" << std::endl;
+    // Crop center
+    cropper.crop_center(inp_img, cropped_img, &crop_scale, &crop_shift_x,
+                        &crop_shift_y);
+  }
+  SaveImage("dbg_cropped_img.jpg", cropped_img);
 
   // Predict
   TensorflowPredictor tf_predictor;
@@ -529,42 +429,42 @@ int main(int argc, char **argv) {
   Image<float> pos_img;
 
   std::cout << "Start running network... " << std::endl << std::flush;
-
   auto startT = std::chrono::system_clock::now();
   tf_predictor.predict(cropped_img, pos_img);
   auto endT = std::chrono::system_clock::now();
   std::chrono::duration<double, std::milli> ms = endT - startT;
   std::cout << "Ran network. elapsed = " << ms.count() << " [ms] " << std::endl;
 
-  // Restore position map(compensation for cropping operaton)
-  float xy_offset[2] = {
-      -76.5f, -76.5f};  // HACK. 76.5 = crop factor = (127.5 - -127.5*1.6). This will be changed when using Dlib.
+  // To remap to input image, please use `crop_scale`, `crop_shift_x` and
+  // `crop_shift_y`.
 
   // kMaxPos comes from `MaxPos` of PosPrediction class in PRNet repo.
-  float kMaxPos = pos_img.getWidth() * 1.1f;
-  RestorePositionMap(&pos_img, crop_scaling_factor * kMaxPos, xy_offset);
+  const float kMaxPos = pos_img.getWidth() * 1.1f;
+  RemapPosition(&pos_img, kMaxPos, 0.f, 0.f);
 
-  // => Usually pixel value in `pos_img` now become mostly within [0, 255] range.
+  Image<float> texture;
+  bool has_texture = CreateTexture(cropped_img, pos_img, &texture);
+  if (has_texture) {
+    SaveImage("texture.jpg", texture); // in linear space.
+  }
 
-  // Save image
-  SaveImage("pos.jpg", pos_img, 1.0f / 255.0f);
-
+  // Create mesh
   Mesh mesh;
   if (!ConvertToMesh(pos_img, face_data, &mesh)) {
     std::cerr << "failed to convert result image to mesh." << std::endl;
     return -1;
   }
 
-  Image<float> texture;
-  bool has_texture = CreateTexture(inp_img, pos_img, &texture);
-  if (has_texture) {
-    SaveImage("texture.jpg", texture); // in linear space.
-  }
-
   SaveAsWObj("output.obj", mesh);
 
+  // Draw landmarks
+  Image<float> dbg_lmk_image;
+  DrawLandmark(cropped_img, pos_img, face_data, &dbg_lmk_image);
+  SaveImage("landmarks.jpg", dbg_lmk_image);
+
 #ifdef USE_GUI
-  bool ret = RunUI(mesh, inp_img);
+  std::vector<Image<float>> debug_images = {dbg_lmk_image};
+  bool ret = RunUI(mesh, cropped_img, debug_images);
   if (!ret) {
     std::cerr << "failed to run GUI." << std::endl;
   }
