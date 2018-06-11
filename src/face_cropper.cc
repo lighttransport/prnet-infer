@@ -2,6 +2,7 @@
 
 #include <cassert>
 #include <cmath>
+#include <iostream>
 
 #ifdef USE_DLIB
 #ifdef __clang__
@@ -200,31 +201,26 @@ public:
     const int width = int(inp_img.getWidth());
     const int height = int(inp_img.getHeight());
 
-    // In non dlib path, PRNet crops image from image center with x1.6 scaling
-    // (minify) then revert it by (1/1.6) scaling.
+    // In non dlib path, PRNet crops image from image center with 1/1.6 scaling
+    // (minify) then revert it by x1.6 scaling.
     // (See PRNet's api.py::PRN::process for details)
     const float SCALE = 1.6f;
     float center[2] = {width / 2.0f - 0.5f, height / 2.0f - 0.5f};
 
-    float size;
-    if (height <= width) {
-      size = float(height) / SCALE;
-    } else {
-      size = float(width) / SCALE;
-    }
-
     int region[4];
-    region[0] = int(center[0] - (size / 2.0f));
-    region[1] = int(center[0] + (size / 2.0f));
-    region[2] = int(center[1] - (size / 2.0f));
-    region[3] = int(center[1] + (size / 2.0f));
+    region[0] = int(center[0] - (width / 2.0f) * SCALE);
+    region[1] = int(center[0] + (width / 2.0f) * SCALE);
+    region[2] = int(center[1] - (height / 2.0f) * SCALE);
+    region[3] = int(center[1] + (height / 2.0f) * SCALE);
+
+    std::cout << "region = " << region[0] << ", " << region[1] << ", " << region[2] << ", " << region[3] << std::endl;
 
     CropImage(inp_img, region[0], region[1], region[2], region[3], &out_img,
               256, 256);
 
-    *scale = 1.f / SCALE;
-    *shift_x = center[0];
-    *shift_y = center[1];
+    *scale = SCALE;
+    *shift_x = center[0] - ((256.0f / 2.0f) - 0.5f) * SCALE;
+    *shift_y = center[1] - ((256.0f / 2.0f) - 0.5f) * SCALE;
 
     return true;
   }

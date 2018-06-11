@@ -1,27 +1,41 @@
 #include "face_frontalizer.h"
 
+#ifdef __clang__
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Weverything"
+#endif
+
+#ifdef USE_DLIB
 #include <dlib/matrix.h>
+#endif
+
+#ifdef __clang__
+#pragma clang diagnostic pop
+#endif
+
+#include <iostream>
 
 namespace prnet {
 
-const int N_VTX = 43867;  // Defined by PRNet template.
-
 void FrontalizeFaceMesh(Mesh *front_mesh, const FaceData &face_data) {
+#ifdef USE_DLIB
+    const int N_VTX = 43867;  // Defined by PRNet template.
+
     assert(front_mesh->vertices.size() == N_VTX * 3);
 
     dlib::matrix<float, N_VTX, 4> vertices_homo;
     for (int i = 0; i < N_VTX; i++) {
-        vertices_homo(i, 0) = front_mesh->vertices[3 * i + 0];
-        vertices_homo(i, 1) = front_mesh->vertices[3 * i + 1];
-        vertices_homo(i, 2) = front_mesh->vertices[3 * i + 2];
+        vertices_homo(i, 0) = front_mesh->vertices[3 * size_t(i) + 0];
+        vertices_homo(i, 1) = front_mesh->vertices[3 * size_t(i) + 1];
+        vertices_homo(i, 2) = front_mesh->vertices[3 * size_t(i) + 2];
         vertices_homo(i, 3) = 1.f;
     }
 
     dlib::matrix<float, N_VTX, 3> canonical_vertices;
     for (int i = 0; i < N_VTX; i++) {
-        canonical_vertices(i, 0) = face_data.canonical_vertices[i][0];
-        canonical_vertices(i, 1) = face_data.canonical_vertices[i][1];
-        canonical_vertices(i, 2) = face_data.canonical_vertices[i][2];
+        canonical_vertices(i, 0) = face_data.canonical_vertices[size_t(i)][0];
+        canonical_vertices(i, 1) = face_data.canonical_vertices[size_t(i)][1];
+        canonical_vertices(i, 2) = face_data.canonical_vertices[size_t(i)][2];
     }
 
     // c = P * v
@@ -30,9 +44,9 @@ void FrontalizeFaceMesh(Mesh *front_mesh, const FaceData &face_data) {
     dlib::matrix<float, N_VTX, 3> front_vertices = vertices_homo * P;
 
     for (int i = 0; i < N_VTX; i++) {
-        front_mesh->vertices[3 * i + 0] = front_vertices(i, 0);
-        front_mesh->vertices[3 * i + 1] = front_vertices(i, 1);
-        front_mesh->vertices[3 * i + 2] = front_vertices(i, 2);
+        front_mesh->vertices[3 * size_t(i) + 0] = front_vertices(i, 0);
+        front_mesh->vertices[3 * size_t(i) + 1] = front_vertices(i, 1);
+        front_mesh->vertices[3 * size_t(i) + 2] = front_vertices(i, 2);
     }
 
 #if 1
@@ -40,7 +54,7 @@ void FrontalizeFaceMesh(Mesh *front_mesh, const FaceData &face_data) {
     {
         float bmin[3];
         float bmax[3];
-        for (int i = 0; i < N_VTX; i++) {
+        for (size_t i = 0; i < N_VTX; i++) {
             float x = front_mesh->vertices[3 * i + 0];
             float y = front_mesh->vertices[3 * i + 1];
             float z = front_mesh->vertices[3 * i + 2];
@@ -70,6 +84,13 @@ void FrontalizeFaceMesh(Mesh *front_mesh, const FaceData &face_data) {
     }
 #endif
 
+#else
+  (void)front_mesh;
+  (void)face_data;
+
+  std::cerr << "Face frontalization is not supported in non dlib buid at the momemnt." << std::endl;
+
+#endif
 }
 
 } // namespace prnet

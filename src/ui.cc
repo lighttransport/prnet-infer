@@ -379,12 +379,42 @@ static int CreateHDRTextureGL(const Image<float> &image, int prev_id = -1) {
     return prev_id;
   }
 
+  // gamma correction.
+  std::vector<float> dst;
+  dst.resize(width * height * n_channel);
+
+  if (n_channel == 1) {
+    for (size_t i = 0; i < width * height; i++) {
+      dst[i] = std::pow(image.getData()[i], 1.0f / 2.2f);
+    }
+  } else if (n_channel == 2) {
+    for (size_t i = 0; i < width * height; i++) {
+      dst[2 * i + 0] = std::pow(image.getData()[2 * i + 0], 1.0f / 2.2f);
+      dst[2 * i + 1] = image.getData()[2 * i + 1];
+    }
+  } else if (n_channel == 3) {
+    for (size_t i = 0; i < width * height; i++) {
+      dst[3 * i + 0] = std::pow(image.getData()[3 * i + 0], 1.0f / 2.2f);
+      dst[3 * i + 1] = std::pow(image.getData()[3 * i + 1], 1.0f / 2.2f);
+      dst[3 * i + 2] = std::pow(image.getData()[3 * i + 2], 1.0f / 2.2f);
+    }
+  } else if (n_channel == 4) {
+    for (size_t i = 0; i < width * height; i++) {
+      dst[4 * i + 0] = std::pow(image.getData()[4 * i + 0], 1.0f / 2.2f);
+      dst[4 * i + 1] = std::pow(image.getData()[4 * i + 1], 1.0f / 2.2f);
+      dst[4 * i + 2] = std::pow(image.getData()[4 * i + 2], 1.0f / 2.2f);
+      dst[4 * i + 3] = image.getData()[4 * i + 3];
+    }
+  }
+  
+  
+
   if (prev_id < 0) {
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, int(width), int(height), 0, format, GL_FLOAT,
-                 reinterpret_cast<const void *>(image.getData()));
+                 reinterpret_cast<const void *>(dst.data()));
   } else {
     glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, int(width), int(height), format, GL_FLOAT,
-                    reinterpret_cast<const void *>(image.getData()));
+                    reinterpret_cast<const void *>(dst.data()));
   }
 
   glBindTexture(GL_TEXTURE_2D, static_cast<GLuint>(last_texture));
@@ -464,7 +494,9 @@ bool RunUI(const Mesh &mesh, const Mesh &front_mesh,
 
   // Main loop
   double mouse_x = 0, mouse_y = 0;
+#ifdef USE_DLIB
   bool use_front_mesh = false;
+#endif
   while (!glfwWindowShouldClose(window)) {
     glfwPollEvents();
     ImGui_ImplGlfwGL2_NewFrame();
@@ -539,6 +571,7 @@ bool RunUI(const Mesh &mesh, const Mesh &front_mesh,
         RequestRender();
       }
 
+#ifdef USE_DLIB
       if (ImGui::Checkbox("frontalized mesh", &use_front_mesh)) {
         // Switch mesh
         if (use_front_mesh) {
@@ -550,6 +583,9 @@ bool RunUI(const Mesh &mesh, const Mesh &front_mesh,
         }
         RequestRender();
       }
+#else
+      (void)front_mesh;
+#endif
 
     }
     ImGui::End();

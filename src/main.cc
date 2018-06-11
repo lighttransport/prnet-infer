@@ -414,7 +414,11 @@ int main(int argc, char **argv) {
   bool dlib_ret = cropper.crop_dlib(inp_img, cropped_img, &crop_scale,
                                     &crop_shift_x, &crop_shift_y);
   if (!dlib_ret) {
-    std::cout << "Failed to detect" << std::endl;
+#ifdef USE_DLIB
+    std::cout << "Failed to detect face " << std::endl;
+#else
+    std::cout << "Crop image at the image center " << std::endl;
+#endif
     // Crop center
     cropper.crop_center(inp_img, cropped_img, &crop_scale, &crop_shift_x,
                         &crop_shift_y);
@@ -437,15 +441,20 @@ int main(int argc, char **argv) {
   std::chrono::duration<double, std::milli> ms = endT - startT;
   std::cout << "Ran network. elapsed = " << ms.count() << " [ms] " << std::endl;
 
-  // To remap to input image, please use `crop_scale`, `crop_shift_x` and
-  // `crop_shift_y`.
-
   // kMaxPos comes from `MaxPos` of PosPrediction class in PRNet repo.
   const float kMaxPos = pos_img.getWidth() * 1.1f;
-  RemapPosition(&pos_img, kMaxPos, 0.f, 0.f);
+  if (dlib_ret) {
+    RemapPosition(&pos_img, kMaxPos, 0.0f, 0.0f);
+  } else {
+    //std::cout << "crop_scale = " << crop_scale << std::endl;
+    //std::cout << "crop_shift = " << crop_shift_x << ", " << crop_shift_y << std::endl;
+    RemapPosition(&pos_img, crop_scale * kMaxPos, crop_shift_x, crop_shift_y);
+  }
+
+  Image<float> color_img = dlib_ret ? cropped_img : inp_img;
 
   Image<float> texture;
-  bool has_texture = CreateTexture(cropped_img, pos_img, &texture);
+  bool has_texture = CreateTexture(color_img, pos_img, &texture);
   if (has_texture) {
     SaveImage("texture.jpg", texture); // in linear space.
   }
@@ -461,7 +470,7 @@ int main(int argc, char **argv) {
 
   // Draw landmarks
   Image<float> dbg_lmk_image;
-  DrawLandmark(cropped_img, pos_img, face_data, &dbg_lmk_image);
+  DrawLandmark(color_img, pos_img, face_data, &dbg_lmk_image);
   SaveImage("landmarks.jpg", dbg_lmk_image);
 
   // Frontizlization
@@ -471,7 +480,7 @@ int main(int argc, char **argv) {
 
 #ifdef USE_GUI
   std::vector<Image<float>> debug_images = {dbg_lmk_image};
-  bool ret = RunUI(mesh, front_mesh, cropped_img, debug_images);
+  bool ret = RunUI(mesh, front_mesh, color_img, debug_images);
   if (!ret) {
     std::cerr << "failed to run GUI." << std::endl;
   }

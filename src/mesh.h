@@ -13,6 +13,18 @@ class Mesh
 {
   public:
     Mesh() {}
+    Mesh(const Mesh &rhs) {
+      vertices = rhs.vertices;
+      faces = rhs.faces;
+      uvs = rhs.uvs;
+    }
+    Mesh &operator=(const Mesh &rhs) {
+      vertices = rhs.vertices;
+      faces = rhs.faces;
+      uvs = rhs.uvs;
+
+      return (*this);
+    }
     ~Mesh() {}
 
   std::vector<float> vertices;
