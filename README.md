@@ -43,7 +43,7 @@ $ make
 
 ### Use dlib
 
-With dlib, it can automatically detect and crop face region of input image.
+It can automatically detect and crop face region of input image when using dlib.
 
 Clone dlib with git submodule.
 
@@ -52,6 +52,8 @@ $ git submodule update --init
 ```
 
 Then enable `WITH_DLIB` in CMake option.
+
+Face frontalization is only available with dlib build at the moment.
 
 
 ## Prepare freezed model of PRNet
@@ -120,9 +122,10 @@ If you build `prnet-infer` with GUI support(`WITH_GUI` in CMake option), you can
 
 ## TODO
 
-* [ ] Use dlib to automatically detect and crop face region.
+* [x] Use dlib to automatically detect and crop face region.
+* [x] Face frontalization(requires dlib)
 * [ ] Faster inference using GPU.
-* [ ] Show landmark points.
+* [x] Show landmark points.
 
 ## License
 
@@ -133,6 +136,7 @@ PRnetInfer source code is licensed under MIT license. Please see `LICENSE` for d
 ### Third party licenses
 
 * PRNet : MIT license. https://github.com/YadiraF/PRNet
+* dlib : Boost Software License. http://dlib.net/
 * NanoRT : MIT license. https://github.com/lighttransport/nanort
 * ImGui : MIT license. https://github.com/ocornut/imgui 
 * glfw : zlib/libpng license http://www.glfw.org/
