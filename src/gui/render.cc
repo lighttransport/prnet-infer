@@ -41,6 +41,11 @@ THE SOFTWARE.
 
 #include <iostream>
 
+#ifdef __clang__
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wunused-variable"
+#endif
+
 #include "matrix.h"
 #include "nanort.h"
 
@@ -48,6 +53,10 @@ THE SOFTWARE.
 
 //#define STB_IMAGE_IMPLEMENTATION
 //#include "stb_image.h"
+
+#ifdef __clang__
+#pragma clang diagnostic pop
+#endif
 
 #ifdef WIN32
 #undef min
@@ -252,6 +261,7 @@ bool Renderer::BuildBVH() {
 
   bool ret = gAccel.Build(uint32_t(mesh_.faces.size() / 3), triangle_mesh, triangle_pred,
                           build_options);
+  (void) ret;
   assert(ret);
 
   auto t_end = std::chrono::system_clock::now();

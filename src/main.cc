@@ -24,6 +24,7 @@
 #include "face-data.h"
 #include "mesh.h"
 #include "face_frontalizer.h"
+#include "sh_optimizer.h"
 
 #include <chrono>
 #include <fstream>
@@ -49,8 +50,9 @@ static bool LoadImage(const std::string &filename, Image<float> &image) {
 
   // Cast
   image.create(size_t(width), size_t(height), size_t(channels));
-  image.foreach ([&](int x, int y, int c, float &v) {
-    v = static_cast<float>(data[(y * width + x) * channels + c]) / 255.f;
+  image.foreach ([&](size_t x, size_t y, size_t c, float &v) {
+    v = static_cast<float>(
+        data[(y * size_t(width) + x) * size_t(channels) + c]) / 255.f;
     // TODO(LTE): Do we really need degamma?
     v = std::pow(v, 2.2f);
   });
@@ -61,15 +63,16 @@ static bool LoadImage(const std::string &filename, Image<float> &image) {
   return true;
 }
 
-static bool SaveImage(const std::string &filename, Image<float> &image, const float scale = 1.0f) {
+static bool SaveImage(const std::string &filename, Image<float> &image,
+                      const float scale = 1.0f) {
   const size_t height = image.getHeight();
   const size_t width = image.getWidth();
   const size_t channels = image.getChannels();
 
   // Cast
   std::vector<unsigned char> data(height * width * channels);
-  image.foreach ([&](int x, int y, int c, float &v) {
-    data[(size_t(y) * width + size_t(x)) * size_t(channels) + size_t(c)] =
+  image.foreach ([&](size_t x, size_t y, size_t c, float &v) {
+    data[(y * width + x) * channels + c] =
         static_cast<unsigned char>(clamp(scale * v * 255.f, 0.0f, 255.0f));
   });
 
@@ -346,10 +349,9 @@ static void DrawLandmark(const Image<float> &cropped_img,
         if (radius < float(rx * rx + ry * ry)) {
             continue;
         }
-        
-        out_img->fetch(size_t(x + rx), size_t(y + ry), 0) = 0;
-        out_img->fetch(size_t(x + rx), size_t(y + ry), 1) = 255;
-        out_img->fetch(size_t(x + rx), size_t(y + ry), 2) = 0;
+        out_img->fetch(size_t(x + rx), size_t(y + ry), 0) = 0.f;
+        out_img->fetch(size_t(x + rx), size_t(y + ry), 1) = 1.f;
+        out_img->fetch(size_t(x + rx), size_t(y + ry), 2) = 0.f;
       }
     }
   }
@@ -432,17 +434,18 @@ int main(int argc, char **argv) {
   tf_predictor.load(graph_filename, "Placeholder",
                     "resfcn256/Conv2d_transpose_16/Sigmoid");
   std::cout << "Loaded model" << std::endl;
-  Image<float> pos_img;
+  Image<float> raw_pos_img;
 
   std::cout << "Start running network... " << std::endl << std::flush;
   auto startT = std::chrono::system_clock::now();
-  tf_predictor.predict(cropped_img, pos_img);
+  tf_predictor.predict(cropped_img, raw_pos_img);
   auto endT = std::chrono::system_clock::now();
   std::chrono::duration<double, std::milli> ms = endT - startT;
   std::cout << "Ran network. elapsed = " << ms.count() << " [ms] " << std::endl;
 
   // kMaxPos comes from `MaxPos` of PosPrediction class in PRNet repo.
-  const float kMaxPos = pos_img.getWidth() * 1.1f;
+  const float kMaxPos = raw_pos_img.getWidth() * 1.1f;
+  Image<float> pos_img = raw_pos_img;
   if (dlib_ret) {
     RemapPosition(&pos_img, kMaxPos, 0.0f, 0.0f);
   } else {
@@ -453,6 +456,7 @@ int main(int argc, char **argv) {
 
   Image<float> color_img = dlib_ret ? cropped_img : inp_img;
 
+  // Create texture image
   Image<float> texture;
   bool has_texture = CreateTexture(color_img, pos_img, &texture);
   if (has_texture) {
@@ -465,7 +469,6 @@ int main(int argc, char **argv) {
     std::cerr << "failed to convert result image to mesh." << std::endl;
     return -1;
   }
-
   SaveAsWObj("output.obj", mesh);
 
   // Draw landmarks
@@ -473,13 +476,18 @@ int main(int argc, char **argv) {
   DrawLandmark(color_img, pos_img, face_data, &dbg_lmk_image);
   SaveImage("landmarks.jpg", dbg_lmk_image);
 
-  // Frontizlization
+  // Frontalization
   Mesh front_mesh = mesh;  // copy
   FrontalizeFaceMesh(&front_mesh, face_data);
   SaveAsWObj("output_front.obj", front_mesh);
 
+  // Sh optimization
+  ShOptimizer sh_optimizer;
+  std::array<float, 9> sh_params;
+  sh_optimizer.optimize(color_img, raw_pos_img, sh_params);
+
 #ifdef USE_GUI
-  std::vector<Image<float>> debug_images = {dbg_lmk_image};
+  std::vector<Image<float>> debug_images = {dbg_lmk_image, raw_pos_img};
   bool ret = RunUI(mesh, front_mesh, color_img, debug_images);
   if (!ret) {
     std::cerr << "failed to run GUI." << std::endl;

@@ -23,17 +23,16 @@ T& Image<T>::fetch(size_t x, size_t y, size_t c) {
 }
 
 template <typename T>
-void Image<T>::foreach(const std::function<void(int, int, T*)> &func,
+void Image<T>::foreach(const std::function<void(size_t, size_t, T*)> &func,
                        uint32_t n_threads) {
   std::vector<std::thread> workers;
-  std::atomic<int> i(0);
+  std::atomic<size_t> i(0);
   for (uint32_t t = 0; t < n_threads; t++) {
-    workers.emplace_back(std::thread([&, t]() {
-      (void)t;
+    workers.emplace_back(std::thread([&]() {
       size_t y = 0;
-      while ((y = size_t(i++)) < height) {
+      while ((y = i++) < height) {
         for (size_t x = 0; x < width; x++) {
-          func(int(x), int(y), &data[(y * width + x) * channels]);
+          func(x, y, &data[(y * width + x) * channels]);
         }
       }
     }));
@@ -44,17 +43,17 @@ void Image<T>::foreach(const std::function<void(int, int, T*)> &func,
 }
 
 template <typename T>
-void Image<T>::foreach(const std::function<void(int, int, const T*)> &func,
-                       uint32_t n_threads) const {
+void Image<T>::foreach(
+    const std::function<void(size_t, size_t, const T*)> &func,
+    uint32_t n_threads) const {
   std::vector<std::thread> workers;
-  std::atomic<int> i(0);
+  std::atomic<size_t> i(0);
   for (uint32_t t = 0; t < n_threads; t++) {
-    workers.emplace_back(std::thread([&, t]() {
-      (void)t;
+    workers.emplace_back(std::thread([&]() {
       size_t y = 0;
-      while ((y = size_t(i++)) < height) {
+      while ((y = i++) < height) {
         for (size_t x = 0; x < width; x++) {
-          func(int(x), int(y), &data[(y * width + x) * channels]);
+          func(x, y, &data[(y * width + x) * channels]);
         }
       }
     }));
@@ -65,18 +64,18 @@ void Image<T>::foreach(const std::function<void(int, int, const T*)> &func,
 }
 
 template <typename T>
-void Image<T>::foreach(const std::function<void(int, int, int, T&)> &func,
-                       uint32_t n_threads) {
+void Image<T>::foreach(
+    const std::function<void(size_t, size_t, size_t, T&)> &func,
+    uint32_t n_threads) {
   std::vector<std::thread> workers;
-  std::atomic<int> i(0);
+  std::atomic<size_t> i(0);
   for (uint32_t t = 0; t < n_threads; t++) {
-    workers.emplace_back(std::thread([&, t]() {
-      (void)t;
+    workers.emplace_back(std::thread([&]() {
       size_t y = 0;
-      while ((y = size_t(i++)) < height) {
+      while ((y = i++) < height) {
         for (size_t x = 0; x < width; x++) {
           for (size_t c = 0; c < channels; c++) {
-            func(int(x), int(y), int(c), data[(y * width + x) * channels + c]);
+            func(x, y, c, data[(y * width + x) * channels + c]);
           }
         }
       }
@@ -88,17 +87,18 @@ void Image<T>::foreach(const std::function<void(int, int, int, T&)> &func,
 }
 
 template <typename T>
-void Image<T>::foreach(const std::function<void(int, int, int, const T&)> &func,
-                       uint32_t n_threads) const {
+void Image<T>::foreach(
+    const std::function<void(size_t, size_t, size_t, const T&)> &func,
+    uint32_t n_threads) const {
   std::vector<std::thread> workers;
-  std::atomic<int> i(0);
+  std::atomic<size_t> i(0);
   for (uint32_t t = 0; t < n_threads; t++) {
-    workers.emplace_back(std::thread([&, t]() {
+    workers.emplace_back(std::thread([&]() {
       size_t y = 0;
       while ((y = i++) < height) {
         for (size_t x = 0; x < width; x++) {
-          for (int c = 0; c < channels; c++) {
-            func(int(x), int(y), int(c), data[(y * width + x) * channels + c]);
+          for (size_t c = 0; c < channels; c++) {
+            func(x, y, c, data[(y * width + x) * channels + c]);
           }
         }
       }

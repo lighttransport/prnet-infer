@@ -592,17 +592,17 @@ bool RunUI(const Mesh &mesh, const Mesh &front_mesh,
 
     ImGui::Begin("Debug Images");
     {
-        for (size_t i = 0; i < debug_image_texs.size(); i++) {
-            // Show debug image
-            const ImTextureID imgui_tex_id =reinterpret_cast<void *>(
-                static_cast<intptr_t>(static_cast<int>(debug_image_texs[i])));
-            const int img_width = int(debug_images[i].getWidth());
-            const int img_height = int(debug_images[i].getHeight());
-            const int width = int(ImGui::GetWindowHeight()) - 10;
-            const int height = img_height * width / img_width;
-            ImGui::Image(imgui_tex_id, ImVec2(width, height), ImVec2(0, 0),
-                         ImVec2(1,1), ImVec4(1, 1, 1, 1), ImVec4(1, 1, 1, 0.5));
-        }
+      for (size_t i = 0; i < debug_image_texs.size(); i++) {
+        // Show debug image
+        const ImTextureID imgui_tex_id =reinterpret_cast<void *>(
+            static_cast<intptr_t>(static_cast<int>(debug_image_texs[i])));
+        const int img_width = int(debug_images[i].getWidth());
+        const int img_height = int(debug_images[i].getHeight());
+        const int width = int(ImGui::GetWindowHeight()) - 10;
+        const int height = img_height * width / img_width;
+        ImGui::Image(imgui_tex_id, ImVec2(width, height), ImVec2(0, 0),
+                     ImVec2(1,1), ImVec4(1, 1, 1, 1), ImVec4(1, 1, 1, 0.5));
+      }
     }
     ImGui::End();
 
