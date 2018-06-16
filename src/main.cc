@@ -24,7 +24,6 @@
 #include "face-data.h"
 #include "mesh.h"
 #include "face_frontalizer.h"
-#include "sh_optimizer.h"
 
 #include <chrono>
 #include <fstream>
@@ -480,11 +479,6 @@ int main(int argc, char **argv) {
   Mesh front_mesh = mesh;  // copy
   FrontalizeFaceMesh(&front_mesh, face_data);
   SaveAsWObj("output_front.obj", front_mesh);
-
-  // Sh optimization
-  ShOptimizer sh_optimizer;
-  std::array<float, 9> sh_params;
-  sh_optimizer.optimize(color_img, raw_pos_img, sh_params);
 
 #ifdef USE_GUI
   std::vector<Image<float>> debug_images = {dbg_lmk_image, raw_pos_img};
