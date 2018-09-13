@@ -8,7 +8,6 @@ option(WITH_GUI "Build with GUI support(for result visualization)" OFF)
 # -----------------------------------------------------------------------
 
 set(CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake" ${CMAKE_MODULE_PATH})
-
 find_package(Sanitizers) # Address sanitizer.
 
 #add_definitions("-DEIGEN_AVOID_STL_ARRAY")
@@ -107,7 +106,7 @@ set (CORE_SOURCE
     )
 
 link_directories(
-    ${TENSORFLOW_BUILD_DIR}
+    ${TENSORFLOW_C_DIR}/lib
     )
 
 if (WITH_DLIB)
@@ -120,15 +119,7 @@ add_executable( prnet
     )
 
 target_include_directories(prnet
-    PUBLIC ${TENSORFLOW_DIR}
-
-    # for array_ops.h
-    PUBLIC ${TENSORFLOW_DIR}/bazel-genfiles
-
-    # headers for external packages
-    PUBLIC ${TENSORFLOW_EXTERNAL_DIR}/external/protobuf_archive/src
-    PUBLIC ${TENSORFLOW_EXTERNAL_DIR}/external/eigen_archive
-    PUBLIC ${TENSORFLOW_EXTERNAL_DIR}/external/nsync/public
+    PUBLIC ${TENSORFLOW_C_DIR}/include
 
     # this project
     PUBLIC ${CMAKE_SOURCE_DIR}/src
@@ -159,7 +150,8 @@ if (WITH_GUI)
 endif (WITH_GUI)
 
 target_link_libraries( prnet
-    tensorflow_cc
+    tensorflow
+    tensorflow_framework
     ${PRNET_INFER_EXT_LIBS}
     ${CMAKE_THREAD_LIBS_INIT}
     ${CMAKE_DL_LIBS}
@@ -172,19 +164,6 @@ IF (CMAKE_CXX_COMPILER_ID MATCHES "Clang")
 ENDIF ()
 
 add_sanitizers(prnet)
-
-# # Tensorflow thing.
-# # Fix for "No session factory registered for the given session" error in the runtime.
-# if (UNIX AND NOT APPLE)
-#   # https://github.com/tensorflow/tensorflow/issues/3308
-#   # TARGET_LINK_LIBRARIES(prnet -Wl,--allow-multiple-definition -Wl,--whole-archive "${TENSORFLOW_DIR}/bazel-bin/tensorflow/libtensorflow_cc.so" -Wl,--no-whole-archive)
-# endif ()
-# 
-# if (UNIX AND NOT APPLE)
-#    # # Make sure that we don't strip global constructors on Linux.
-#    # https://github.com/tensorflow/tensorflow/issues/3308
-#    #SET(CMAKE_EXE_LINKER_FLAGS "-Wl,--allow-multiple-definition -Wl,--whole-archive ${CMAKE_EXE_LINKER_FLAGS}")
-# endif ()
 
 # [VisualStudio]
 if (WIN32)

@@ -5,40 +5,58 @@
 #pragma clang diagnostic ignored "-Weverything"
 #endif
 
-#include "tensorflow/cc/ops/const_op.h"
-#include "tensorflow/cc/ops/image_ops.h"
-#include "tensorflow/cc/ops/standard_ops.h"
-#include "tensorflow/core/framework/graph.pb.h"
-#include "tensorflow/core/framework/tensor.h"
-#include "tensorflow/core/graph/default_device.h"
-#include "tensorflow/core/graph/graph_def_builder.h"
-#include "tensorflow/core/lib/core/errors.h"
-#include "tensorflow/core/lib/core/stringpiece.h"
-#include "tensorflow/core/lib/core/threadpool.h"
-#include "tensorflow/core/lib/io/path.h"
-#include "tensorflow/core/lib/strings/stringprintf.h"
-#include "tensorflow/core/platform/env.h"
-#include "tensorflow/core/platform/init_main.h"
-#include "tensorflow/core/platform/logging.h"
-#include "tensorflow/core/platform/types.h"
-#include "tensorflow/core/public/session.h"
-#include "tensorflow/core/util/command_line_flags.h"
+#include "tensorflow/c/c_api.h"
 
 #ifdef __clang__
 #pragma clang diagnostic pop
 #endif
 
-using namespace tensorflow;
+#include <iostream>
+#include <fstream>
+#include <string>
 
 namespace prnet {
 
 namespace {
 
+void free_buffer(void *data, size_t length) {
+  free(data);
+}
+
+TF_Buffer *read_file(const std::string &filename) {
+
+  FILE *f = fopen(filename.c_str(), "rb");
+  if (!f) {
+    std::cerr << "Failed to open file : " << filename << std::endl;
+    return nullptr;
+  }
+
+  fseek(f, 0, SEEK_END);
+  long fsize = ftell(f);
+  fseek(f, 0, SEEK_SET);
+
+  if (fsize < 16) {
+    std::cerr << "Invalid data size : " << fsize << std::endl;
+    return nullptr;
+  }
+
+  void *data = malloc(fsize);
+  fread(data, fsize, 1, f);
+  fclose(f);
+
+  TF_Buffer *buf = TF_NewBuffer();
+  buf->data = data;
+  buf->length = fsize;
+  buf->data_deallocator = free_buffer;
+  return buf;
+}
+
 // Reads a model graph definition from disk, and creates a session object you
 // can use to run it.
-Status LoadGraph(const string& graph_file_name,
-                 std::unique_ptr<tensorflow::Session>* session) {
-  tensorflow::GraphDef graph_def;
+bool LoadGraph(const std::string& graph_file_name, TF_Session *session) {
+  
+#if 0 // TODO
+  //tensorflow::GraphDef graph_def;
   Status load_graph_status =
       ReadBinaryProto(tensorflow::Env::Default(), graph_file_name, &graph_def);
   if (!load_graph_status.ok()) {
@@ -51,6 +69,8 @@ Status LoadGraph(const string& graph_file_name,
     return session_create_status;
   }
   return Status::OK();
+#endif
+  return false;
 }
 
 } // anonymous namespace
@@ -58,16 +78,15 @@ Status LoadGraph(const string& graph_file_name,
 class TensorflowPredictor::Impl {
 public:
   void init(int argc, char* argv[]) {
-    // We need to call this to set up global state for TensorFlow.
-    tensorflow::port::InitMain(argv[0], &argc, &argv);
+    std::cout << "TF C API. Version " << TF_Version() << std::endl;
   }
 
   bool load(const std::string& graph_filename, const std::string& inp_layer,
             const std::string& out_layer) {
     // First we load and initialize the model.
-    Status load_graph_status = LoadGraph(graph_filename, &session);
-    if (!load_graph_status.ok()) {
-      std::cerr << load_graph_status;
+    bool load_graph_status = LoadGraph(graph_filename, session);
+    if (!load_graph_status) {
+      std::cerr << "Failed to load graph. " << std::endl;
       return false;
     }
 
@@ -78,6 +97,7 @@ public:
   }
 
   bool predict(const Image<float>& inp_img, Image<float>& out_img) {
+#if 0
     // Copy from input image
     Eigen::Index inp_width = static_cast<Eigen::Index>(inp_img.getWidth());
     Eigen::Index inp_height = static_cast<Eigen::Index>(inp_img.getHeight());
@@ -109,10 +129,14 @@ public:
     });
 
     return true;
+#else
+    return false;
+#endif
   }
 
 private:
-  std::unique_ptr<tensorflow::Session> session;
+  //std::unique_ptr<tensorflow::Session> session;
+  TF_Session *session;
   std::string input_layer, output_layer;
 };
 
