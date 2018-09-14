@@ -16,7 +16,21 @@ find_package(Sanitizers) # Address sanitizer.
 find_package(Threads)
 
 if (WITH_DLIB)
-  add_subdirectory(${CMAKE_SOURCE_DIR}/src/dlib)
+
+  set(DLIB_JPEG_SUPPORT OFF CACHE INTERNAL "" FORCE)
+  set(DLIB_PNG_SUPPORT OFF CACHE INTERNAL "" FORCE)
+  set(DLIB_GIF_SUPPORT OFF CACHE INTERNAL "" FORCE)
+  set(DLIB_USE_MKL_FFT OFF CACHE INTERNAL "" FORCE)
+  set(DLIB_LINK_WITH_SQLITE3 OFF CACHE INTERNAL "" FORCE)
+  set(DLIB_USE_BLAS OFF CACHE INTERNAL "" FORCE)
+  set(DLIB_USE_LAPACK OFF CACHE INTERNAL "" FORCE)
+  set(DLIB_USE_CUDA OFF CACHE INTERNAL "" FORCE)
+
+  add_subdirectory(${CMAKE_SOURCE_DIR}/src/dlib dlib_build)
+
+  # For some reason, setting DLIB_NO_GUI_SUPPORT only effective after `add_subdirectory`
+  set(DLIB_NO_GUI_SUPPORT ON CACHE INTERNAL "" FORCE)
+
   include_directories(${CMAKE_SOURCE_DIR}/src/dlib)
   add_definitions("-DUSE_DLIB=1")
 endif (WITH_DLIB)
@@ -110,7 +124,7 @@ link_directories(
     )
 
 if (WITH_DLIB)
-  list(APPEND PRNET_INFER_EXT_LIBS dlib)
+  list(APPEND PRNET_INFER_EXT_LIBS dlib::dlib)
 endif (WITH_DLIB)
 
 add_executable( prnet
