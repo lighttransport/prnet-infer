@@ -41,36 +41,65 @@ TF_Buffer *read_file(const std::string &filename) {
   }
 
   void *data = malloc(fsize);
-  fread(data, fsize, 1, f);
+  size_t n = fread(data, fsize, 1, f);
   fclose(f);
 
+  if (n != 1) {
+    std::cerr << "Fread error" << std::endl;
+    return nullptr;
+  }
+    
   TF_Buffer *buf = TF_NewBuffer();
   buf->data = data;
   buf->length = fsize;
   buf->data_deallocator = free_buffer;
+
   return buf;
 }
 
 // Reads a model graph definition from disk, and creates a session object you
 // can use to run it.
-bool LoadGraph(const std::string& graph_file_name, TF_Session *session) {
+bool LoadGraph(const std::string& graph_file_name, TF_Status *status, TF_Graph **graph, TF_Session **session) {
   
-#if 0 // TODO
-  //tensorflow::GraphDef graph_def;
-  Status load_graph_status =
-      ReadBinaryProto(tensorflow::Env::Default(), graph_file_name, &graph_def);
-  if (!load_graph_status.ok()) {
-    return tensorflow::errors::NotFound("Failed to load compute graph at '",
-                                        graph_file_name, "'");
+  TF_Buffer *graph_def = read_file(graph_file_name);
+  if (graph_def == nullptr) {
+    std::cerr << "Failed to read graph file." << std::endl;
+    return false;
   }
-  session->reset(tensorflow::NewSession(tensorflow::SessionOptions()));
-  Status session_create_status = (*session)->Create(graph_def);
-  if (!session_create_status.ok()) {
-    return session_create_status;
+
+  TF_SessionOptions *sess_opts = nullptr;
+
+  (*graph) = TF_NewGraph();
+  TF_ImportGraphDefOptions *graph_opts = TF_NewImportGraphDefOptions();
+  TF_GraphImportGraphDef((*graph), graph_def, graph_opts, status);
+
+
+  bool ret = false;
+
+  if (TF_GetCode(status) != TF_OK) {
+    std::cerr << "ERROR: Unable to import graph : " << TF_Message(status) << std::endl;
+    goto release;
   }
-  return Status::OK();
-#endif
-  return false;
+
+  std::cout << "Loaded graph file : " << graph_file_name << std::endl;
+
+  sess_opts = TF_NewSessionOptions();
+  (*session) = TF_NewSession((*graph), sess_opts, status);
+  if (TF_GetCode(status) != TF_OK) {
+    std::cerr << "Failed to create Session : " << TF_Message(status) << std::endl;
+
+    goto release;
+  }
+  
+  ret = true;
+
+release:
+
+  TF_DeleteSessionOptions(sess_opts);
+  TF_DeleteBuffer(graph_def);
+  TF_DeleteImportGraphDefOptions(graph_opts);
+
+  return ret;
 }
 
 } // anonymous namespace
@@ -81,12 +110,25 @@ public:
     std::cout << "TF C API. Version " << TF_Version() << std::endl;
   }
 
+  void release() {
+    if (session != nullptr) {
+      TF_CloseSession(session, status);
+      TF_DeleteSession(session, status);
+      TF_DeleteGraph(graph);
+      TF_DeleteStatus(status);
+    }
+  }
+
   bool load(const std::string& graph_filename, const std::string& inp_layer,
             const std::string& out_layer) {
+    if (status == nullptr) {
+      status = TF_NewStatus();
+    }
+
     // First we load and initialize the model.
-    bool load_graph_status = LoadGraph(graph_filename, session);
+    bool load_graph_status = LoadGraph(graph_filename, status, &graph, &session);
     if (!load_graph_status) {
-      std::cerr << "Failed to load graph. " << std::endl;
+      std::cerr << "Failed to load graph from a file : " << graph_filename << std::endl;
       return false;
     }
 
@@ -97,52 +139,88 @@ public:
   }
 
   bool predict(const Image<float>& inp_img, Image<float>& out_img) {
-#if 0
-    // Copy from input image
-    Eigen::Index inp_width = static_cast<Eigen::Index>(inp_img.getWidth());
-    Eigen::Index inp_height = static_cast<Eigen::Index>(inp_img.getHeight());
-    Eigen::Index inp_channels = static_cast<Eigen::Index>(inp_img.getChannels());
-    Tensor input_tensor(DT_FLOAT, {1, inp_height, inp_width, inp_channels});
-    // TODO: No copy
-    std::copy_n(inp_img.getData(), inp_width * inp_height * inp_channels,
-                input_tensor.flat<float>().data());
 
-    // Run
-    std::vector<Tensor> output_tensors;
-    Status run_status = session->Run({{input_layer, input_tensor}},
-                                     {output_layer}, {}, &output_tensors);
-    if (!run_status.ok()) {
-      std::cerr << "Running model failed: " << run_status;
-      return false;
+    std::vector<TF_Output> inputs;
+    std::vector<TF_Tensor*> input_values;
+
+    // Setup input tensor.
+
+    size_t inp_width = inp_img.getWidth();
+    size_t inp_height = inp_img.getHeight();
+    size_t inp_channels = inp_img.getChannels();
+
+    std::cout << "input height x width x channels = " << inp_height << " x " << inp_width << " x " << inp_channels << std::endl;
+
+    int64_t input_dims[4] = {1, int64_t(inp_height), int64_t(inp_width), int64_t(inp_channels)};
+    size_t input_len = 1 * inp_height * inp_width * inp_channels * sizeof(float);
+
+    TF_Tensor *input_tensor = TF_NewTensor(TF_FLOAT, input_dims, 4, reinterpret_cast<void *>(const_cast<float *>(inp_img.getData())), input_len, /* arg*/ nullptr, /* dealloc_arg */nullptr);
+    input_values.push_back(input_tensor);
+    
+    TF_Operation* input_op = TF_GraphOperationByName(graph, input_layer.c_str());
+    TF_Output input_opout = {input_op, 0};
+
+    inputs.push_back(input_opout);
+
+    std::vector<TF_Output> outputs;
+    TF_Operation *output_op = TF_GraphOperationByName(graph, output_layer.c_str());
+    TF_Output output_opout = {output_op, 0};
+    outputs.push_back(output_opout);
+
+    std::vector<TF_Tensor*> output_values(outputs.size(), nullptr);
+
+    // output tensor size = input tensor size.
+    int64_t output_dims[4] = {1, int64_t(inp_height), int64_t(inp_width), int64_t(inp_channels)};
+    size_t output_len = 1 * inp_height * inp_width * inp_channels * sizeof(float);
+    TF_Tensor* output_value = TF_AllocateTensor(TF_FLOAT, output_dims, 4, output_len);
+    output_values.push_back(output_value);
+
+    std::cout << "Output info: " << TF_Dim(output_value, 0) << std::endl;
+
+    TF_SessionRun(session,
+      /* run_options */nullptr,
+      /* const TF_Output* inputs */ &inputs[0],
+      /* TF_Tensor* const* input_values */ &input_values[0],
+      /* int ninputs */ inputs.size(),
+      /* const TF_Output* outputs */ &outputs[0],
+      /* TF_Tensor** output_values */ &output_values[0],
+      /* int noutputs */ outputs.size(),
+      /* target_opers */ nullptr,
+      /* int ntargets */ 0,
+      /* run_metadata */ nullptr,
+      /* status */ status);
+
+    if (TF_GetCode(status) != TF_OK) {
+      std::cerr << "Failed to run session : " << TF_Message(status) << std::endl;
     }
-    const Tensor& output_tensor = output_tensors[0];
+
+    float *output_ptr = static_cast<float *>(TF_TensorData(output_values[0]));
 
     // Copy to output image
-    TTypes<float, 4>::ConstTensor tensor = output_tensor.tensor<float, 4>();
-    assert(tensor.dimension(0) == 1);
-    size_t out_height = static_cast<size_t>(tensor.dimension(1));
-    size_t out_width = static_cast<size_t>(tensor.dimension(2));
-    size_t out_channels = static_cast<size_t>(tensor.dimension(3));
-    out_img.create(out_width, out_height, out_channels);
+    out_img.create(inp_width, inp_height, inp_channels);
     out_img.foreach([&](int x, int y, int c, float& v) {
-      v = tensor(0, y, x, c);
+      v = output_ptr[inp_channels * (y * inp_width + x) + c];
     });
 
+    //TF_DeleteTensor(input_tensor);
+    //TF_DeleteTensor(output_values[0]);
+
     return true;
-#else
-    return false;
-#endif
   }
 
 private:
-  //std::unique_ptr<tensorflow::Session> session;
-  TF_Session *session;
+  TF_Session *session = nullptr;
+  TF_Status *status = nullptr;
+  TF_Graph *graph = nullptr;
   std::string input_layer, output_layer;
 };
 
 // PImpl pattern
 TensorflowPredictor::TensorflowPredictor() : impl(new Impl()) {}
-TensorflowPredictor::~TensorflowPredictor() {}
+TensorflowPredictor::~TensorflowPredictor() {
+  impl->release();
+}
+
 void TensorflowPredictor::init(int argc, char* argv[]) {
   impl->init(argc, argv);
 }

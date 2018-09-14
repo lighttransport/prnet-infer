@@ -14,16 +14,15 @@
 #pragma clang diagnostic pop
 #endif
 
-
 #ifdef USE_GUI
 #include "ui.h"
 #endif
 
-#include "face_cropper.h"
-#include "tf_predictor.h"
 #include "face-data.h"
-#include "mesh.h"
+#include "face_cropper.h"
 #include "face_frontalizer.h"
+#include "mesh.h"
+#include "tf_predictor.h"
 
 #include <chrono>
 #include <fstream>
@@ -51,7 +50,8 @@ static bool LoadImage(const std::string &filename, Image<float> &image) {
   image.create(size_t(width), size_t(height), size_t(channels));
   image.foreach ([&](size_t x, size_t y, size_t c, float &v) {
     v = static_cast<float>(
-        data[(y * size_t(width) + x) * size_t(channels) + c]) / 255.f;
+            data[(y * size_t(width) + x) * size_t(channels) + c]) /
+        255.f;
     // TODO(LTE): Do we really need degamma?
     v = std::pow(v, 2.2f);
   });
@@ -127,7 +127,7 @@ static bool CreateTexture(const Image<float> &image, const Image<float> &posmap,
   size_t width = image.getWidth();
   size_t height = image.getHeight();
 
-  texture->create(width, height, /* RGB */3);
+  texture->create(width, height, /* RGB */ 3);
 
   for (size_t y = 0; y < height; y++) {
     for (size_t x = 0; x < width; x++) {
@@ -225,7 +225,7 @@ static bool ConvertToMesh(const Image<float> &image, const FaceData &face_data,
       bmax[2] = std::max(bmax[2], z);
     }
 
-    //normalize uv
+    // normalize uv
     float u = x / float(image.getWidth());
     float v = y / float(image.getHeight());
 
@@ -306,7 +306,6 @@ static bool SaveAsWObj(const std::string &filename, prnet::Mesh &mesh) {
 // Restore position coordinate.
 static void RemapPosition(Image<float> *pos_img, const float scale,
                           const float shift_x, const float shift_y) {
-
   size_t n = pos_img->getWidth() * pos_img->getHeight();
 
   // // DBG
@@ -314,7 +313,7 @@ static void RemapPosition(Image<float> *pos_img, const float scale,
   //   float x = pos_img->getData()[3 * i + 0];
   //   float y = pos_img->getData()[3 * i + 1];
   //   float z = pos_img->getData()[3 * i + 2];
-  // 
+  //
   //   std::cout << "Org [" << i << "] = " << x << ", " << y << ", " << z <<
   //   std::endl;
   // }
@@ -326,13 +325,13 @@ static void RemapPosition(Image<float> *pos_img, const float scale,
 
     pos_img->getData()[3 * i + 0] = x * scale + shift_x;
     pos_img->getData()[3 * i + 1] = y * scale + shift_y;
-    pos_img->getData()[3 * i + 2] = z * scale; // TODO(LTE): Do we need z offset?
+    pos_img->getData()[3 * i + 2] =
+        z * scale;  // TODO(LTE): Do we need z offset?
   }
 }
 
 static void DrawLandmark(const Image<float> &cropped_img,
-                         const Image<float> &pos_img,
-                         const FaceData& face_data,
+                         const Image<float> &pos_img, const FaceData &face_data,
                          Image<float> *out_img, float radius = 1.f) {
   *out_img = cropped_img;  // copy
   const size_t n_pt = face_data.uv_kpt_indices.size() / 2;
@@ -346,7 +345,11 @@ static void DrawLandmark(const Image<float> &cropped_img,
     for (int rx = -ksize; rx <= ksize; rx++) {
       for (int ry = -ksize; ry <= ksize; ry++) {
         if (radius < float(rx * rx + ry * ry)) {
-            continue;
+          continue;
+        }
+        if (((x + rx) < 0) || ((x + rx) >= out_img->getWidth()) ||
+            ((y + ry) < 0) || ((y + ry) >= out_img->getWidth())) {
+          continue;
         }
         out_img->fetch(size_t(x + rx), size_t(y + ry), 0) = 0.f;
         out_img->fetch(size_t(x + rx), size_t(y + ry), 1) = 1.f;
@@ -448,8 +451,9 @@ int main(int argc, char **argv) {
   if (dlib_ret) {
     RemapPosition(&pos_img, kMaxPos, 0.0f, 0.0f);
   } else {
-    //std::cout << "crop_scale = " << crop_scale << std::endl;
-    //std::cout << "crop_shift = " << crop_shift_x << ", " << crop_shift_y << std::endl;
+    // std::cout << "crop_scale = " << crop_scale << std::endl;
+    // std::cout << "crop_shift = " << crop_shift_x << ", " << crop_shift_y <<
+    // std::endl;
     RemapPosition(&pos_img, crop_scale * kMaxPos, crop_shift_x, crop_shift_y);
   }
 
@@ -459,7 +463,7 @@ int main(int argc, char **argv) {
   Image<float> texture;
   bool has_texture = CreateTexture(color_img, pos_img, &texture);
   if (has_texture) {
-    SaveImage("texture.jpg", texture); // in linear space.
+    SaveImage("texture.jpg", texture);  // in linear space.
   }
 
   // Create mesh
