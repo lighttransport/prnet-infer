@@ -1,6 +1,6 @@
-# PRNet inference in C++11
+# PRNet inference in C+11
 
-PRNetInfer is a C++11 port of PRNet https://github.com/YadiraF/PRNet in Tensorflow C++ API(Inference only).
+PRNetInfer is a C++11 port of PRNet https://github.com/YadiraF/PRNet using Tensorflow with C API(Inference only).
 
 ![](images/earing-result.jpg)
 
@@ -13,32 +13,46 @@ PRNetInfer is a C++11 port of PRNet https://github.com/YadiraF/PRNet in Tensorfl
 ## Supported platforms
 
 * [x] Ubuntu 16.04
-* [ ] Windows and macOS may work
+* [x] Windows10 + Visual Studio 2017
+  * [ ] MinGW build may work.
+* [ ] macOS may work
 
 ## Setup TensorFlow
 
-Build TensorFlow with C++ API supoort.
-TensorFlow Lite does not support enough functionality(e.g. `conv2d_transpose`) to run PRNet model at the moment(`r1.8`), so use ordinal TensorFlow.
+Build TensorFlow with C API supoort.
 
-Please check out tensorflow `r1.8`, then build `libtensorflow_cc.so` with Bazel.
-(CMake and Makefile based build system does not work well)
+We recommend to use prebuilt package of TensorFlow for C.
 
-Please don't forget to specify `monolithic` option. Other build configuration won't work when linked with an user C++ app.
+## Build on Linux
 
-```
-$ cd $tensorflow
-$ git checkout r1.8
-$ bazel build --config opt --config monolithic tensorflow/libtensorflow_cc.so
-```
-
-## Build
-
-Edit TensorFlow path in `bootstrap.sh`, then
+Edit TensorFlow for C path in `bootstrap-c.sh`, then
 
 ```
-$ ./bootstrap.sh
+$ ./bootstrap-c.sh
 $ cd build
 $ make
+```
+
+Disable DLIB and GUI support in `bootstrap-c.sh` if you don't have dlib and/or X11 installed on your system.
+
+## Build on Windows(Visual Studio)
+
+We recommend to use prebuilt package from
+
+https://github.com/Neargye/hello_tf_c_api
+
+since their prebuilt package contains .lib(import library) which is required for linking in Visual Studio.
+
+Edit TensorFlow for C path in `vcsetup.bat`, then
+
+```
+> vcsetup.bat
+```
+
+You can use following procedure if you use bash terminal(e.g. git for Windows)
+
+```
+$ cmd //c vcsetup.bat
 ```
 
 ### Use dlib
@@ -95,9 +109,15 @@ $ bazel-bin/tensorflow/python/tools/freeze_graph \
   --output_node_names=resfcn256/Conv2d_transpose_16/Sigmoid
 ```
 
-## Run
+## Prepare input image
 
-Prepare 256x256 input image. Input image must contain face area by manual cropping(automatically crop face area using dlib is TODO)
+Copy `tensorflow.dll` to your path.
+
+In `PRNet` repo, setup ASCII representation of `Data/uv-data/canonical_vertices.npy` and save it as `Data/uv-data/canonical_vertices.txt`
+
+### Without dlib build
+
+Prepare 256x256 input image. Input image must contain face area by manual cropping.
 
 Here is an example of creating 256x256 pixel image using ImageMagick.
 (Do not forget to append `!` to image extent)
@@ -106,17 +126,23 @@ Here is an example of creating 256x256 pixel image using ImageMagick.
 $ convert input.png -resize 256x256! image-256x256.png
 ```
 
-Then, run prnet like the following.
+### With dlib build
+
+Face are is automatically detected and cropped using dlib so you can use arbitrary sized image unless dlib can detect a face.
+
+## Run
+
+Run prnet infer like the following.
 
 ```
 $ ./prnet --graph ../../PRNet/prnet_frozen.pb --data ../../PRNet/Data --image ../input.png
 ```
 
-* `--image` specifies input image(must be 256x256 pixels and contains face region by manual cropping)
+* `--image` specifies input image
 * `--graph` specifies the freezed graph file.
 * `--data` specifies `Data` folder of PRNet repository.
 
-Wavefront .obj file will be written to `output.obj`.
+Wavefront .obj file will be written as `output.obj`.
 
 If you build `prnet-infer` with GUI support(`WITH_GUI` in CMake option), you can view resulting mesh.
 
@@ -124,8 +150,8 @@ If you build `prnet-infer` with GUI support(`WITH_GUI` in CMake option), you can
 
 * [x] Use dlib to automatically detect and crop face region.
 * [x] Face frontalization(requires dlib)
-* [ ] Faster inference using GPU.
 * [x] Show landmark points.
+* [ ] Faster inference using GPU.
 
 ## License
 

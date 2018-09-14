@@ -46,14 +46,21 @@ static bool LoadImage(const std::string &filename, Image<float> &image) {
     return false;
   }
 
+  if (channels < 3) {
+    std::cerr << "Channels must be 3 or 4 but got " << channels << std::endl;
+    return false;
+  }
+
+  std::cout << "Image resolution : " << width << " x " << height << std::endl;
+
   // Cast
-  image.create(size_t(width), size_t(height), size_t(channels));
+  image.create(size_t(width), size_t(height), 3);
   image.foreach ([&](size_t x, size_t y, size_t c, float &v) {
-    v = static_cast<float>(
+    float p = static_cast<float>(
             data[(y * size_t(width) + x) * size_t(channels) + c]) /
         255.f;
     // TODO(LTE): Do we really need degamma?
-    v = std::pow(v, 2.2f);
+    v = std::pow(p, 2.2f);
   });
 
   // Free
@@ -402,12 +409,14 @@ int main(int argc, char **argv) {
 
   Image<float> inp_img;
   if (!LoadImage(image_filename, inp_img)) {
+    std::cerr << "Faile to load input image" << std::endl;
     return -1;
   }
 
   // Meshing
   FaceData face_data;
-  if (!LoadFaceData("../Data/uv-data", &face_data)) {
+  if (!LoadFaceData(data_dirname + "/uv-data", &face_data)) {
+    std::cerr << "Failed to load Face UV data" << std::endl; 
     return -1;
   }
 

@@ -154,7 +154,11 @@ public:
     int64_t input_dims[4] = {1, int64_t(inp_height), int64_t(inp_width), int64_t(inp_channels)};
     size_t input_len = 1 * inp_height * inp_width * inp_channels * sizeof(float);
 
-    TF_Tensor *input_tensor = TF_NewTensor(TF_FLOAT, input_dims, 4, reinterpret_cast<void *>(const_cast<float *>(inp_img.getData())), input_len, /* arg*/ nullptr, /* dealloc_arg */nullptr);
+    std::vector<float> input_buffer;
+    input_buffer.resize(input_len / sizeof(float));
+    memcpy(input_buffer.data(), inp_img.getData(), input_len);
+    
+    TF_Tensor *input_tensor = TF_NewTensor(TF_FLOAT, input_dims, 4, reinterpret_cast<void *>(const_cast<float *>(input_buffer.data())), input_len, /* arg */ nullptr, /* dealloc_arg */nullptr);
     input_values.push_back(input_tensor);
     
     TF_Operation* input_op = TF_GraphOperationByName(graph, input_layer.c_str());
