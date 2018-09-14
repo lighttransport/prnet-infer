@@ -243,10 +243,10 @@ static void Display(int width, int height, int buffer_mode,
     }
   } else if (buffer_mode == example::SHOW_BUFFER_DEPTH) {
     float d_min =
-        std::min(gUIParam.showDepthRange[0], gUIParam.showDepthRange[1]);
+        (std::min)(gUIParam.showDepthRange[0], gUIParam.showDepthRange[1]);
     float d_diff =
         std::fabs(gUIParam.showDepthRange[1] - gUIParam.showDepthRange[0]);
-    d_diff = std::max(d_diff, std::numeric_limits<float>::epsilon());
+    d_diff = (std::max)(d_diff, std::numeric_limits<float>::epsilon());
     for (size_t i = 0; i < buf.size(); i++) {
       float v = (buffer.depth[i] - d_min) / d_diff;
       if (gUIParam.showDepthPeseudoColor) {

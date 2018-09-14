@@ -165,7 +165,6 @@ endif (WITH_GUI)
 
 target_link_libraries( prnet
     tensorflow
-    tensorflow_framework
     ${PRNET_INFER_EXT_LIBS}
     ${CMAKE_THREAD_LIBS_INIT}
     ${CMAKE_DL_LIBS}

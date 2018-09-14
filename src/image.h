@@ -1,11 +1,19 @@
 #ifndef IMAGE_180602
 #define IMAGE_180602
 
+#ifdef _WIN32
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#endif
+
+
 #include <atomic>
 #include <thread>
 #include <memory>
 #include <vector>
 #include <functional>
+#include <algorithm>
 
 namespace prnet {
 
@@ -15,7 +23,7 @@ namespace prnet {
 #endif
 
 const static uint32_t DEFAULT_HW_CONCURRENCY =
-  std::max(1U, std::thread::hardware_concurrency());
+  (std::max)(1U, std::thread::hardware_concurrency());
 
 #ifdef __clang__
 #pragma clang diagnostic pop
