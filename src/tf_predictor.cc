@@ -14,6 +14,7 @@
 #include <iostream>
 #include <fstream>
 #include <string>
+#include <cstring>
 
 namespace prnet {
 
@@ -21,6 +22,13 @@ namespace {
 
 void free_buffer(void *data, size_t length) {
   free(data);
+}
+
+void nonfree_dealloc_tensor(void *data, size_t length, void *arg) {
+  // No need to free memory 
+  (void)data;
+  (void)length;
+  (void)arg;
 }
 
 TF_Buffer *read_file(const std::string &filename) {
@@ -158,7 +166,8 @@ public:
     input_buffer.resize(input_len / sizeof(float));
     memcpy(input_buffer.data(), inp_img.getData(), input_len);
     
-    TF_Tensor *input_tensor = TF_NewTensor(TF_FLOAT, input_dims, 4, reinterpret_cast<void *>(const_cast<float *>(input_buffer.data())), input_len, /* arg */ nullptr, /* dealloc_arg */nullptr);
+    // Must provide deallocator otherwise null pointer exception will happen when deleting tensor.
+    TF_Tensor *input_tensor = TF_NewTensor(TF_FLOAT, input_dims, 4, reinterpret_cast<void *>(const_cast<float *>(input_buffer.data())), input_len, nonfree_dealloc_tensor, /* dealloc_arg */nullptr);
     input_values.push_back(input_tensor);
     
     TF_Operation* input_op = TF_GraphOperationByName(graph, input_layer.c_str());
@@ -173,13 +182,7 @@ public:
 
     std::vector<TF_Tensor*> output_values(outputs.size(), nullptr);
 
-    // output tensor size = input tensor size.
-    int64_t output_dims[4] = {1, int64_t(inp_height), int64_t(inp_width), int64_t(inp_channels)};
-    size_t output_len = 1 * inp_height * inp_width * inp_channels * sizeof(float);
-    TF_Tensor* output_value = TF_AllocateTensor(TF_FLOAT, output_dims, 4, output_len);
-    output_values.push_back(output_value);
-
-    std::cout << "Output info: " << TF_Dim(output_value, 0) << std::endl;
+    output_values.push_back(nullptr);
 
     TF_SessionRun(session,
       /* run_options */nullptr,
@@ -206,8 +209,11 @@ public:
       v = output_ptr[inp_channels * (y * inp_width + x) + c];
     });
 
-    //TF_DeleteTensor(input_tensor);
-    //TF_DeleteTensor(output_values[0]);
+    TF_DeleteTensor(input_tensor);
+    // TF_SessionRun will allocate TF_Tensor through TF_Run_Helper() called within TF_SessionRun().
+    // So delete output tensor here.
+    TF_DeleteTensor(output_values[0]); 
+
 
     return true;
   }
@@ -216,6 +222,7 @@ private:
   TF_Session *session = nullptr;
   TF_Status *status = nullptr;
   TF_Graph *graph = nullptr;
+  TF_Tensor *input_tensor = nullptr;
   std::string input_layer, output_layer;
 };
 
