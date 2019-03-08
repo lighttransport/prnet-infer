@@ -17,6 +17,7 @@ find_package(Sanitizers) # Address sanitizer.
 find_package(Threads)
 
 if (WITH_DLIB)
+  set(DLIB_NO_GUI_SUPPORT OFF CACHE INTERNAL "" FORCE)
   add_subdirectory(${CMAKE_SOURCE_DIR}/src/dlib)
   include_directories(${CMAKE_SOURCE_DIR}/src/dlib)
   add_definitions("-DUSE_DLIB=1")
@@ -179,7 +180,7 @@ add_sanitizers(prnet)
 #   # https://github.com/tensorflow/tensorflow/issues/3308
 #   # TARGET_LINK_LIBRARIES(prnet -Wl,--allow-multiple-definition -Wl,--whole-archive "${TENSORFLOW_DIR}/bazel-bin/tensorflow/libtensorflow_cc.so" -Wl,--no-whole-archive)
 # endif ()
-# 
+#
 # if (UNIX AND NOT APPLE)
 #    # # Make sure that we don't strip global constructors on Linux.
 #    # https://github.com/tensorflow/tensorflow/issues/3308
@@ -192,7 +193,7 @@ if (WIN32)
   if (CMAKE_VERSION VERSION_GREATER 3.6.0)
     set_property(DIRECTORY PROPERTY VS_STARTUP_PROJECT prnet)
   endif ()
-  
+
   # For easier debugging in VS IDE(cmake 3.8.0 or later required)
   if (CMAKE_VERSION VERSION_GREATER 3.8.0)
     # Set working directory to $lucia git repo root.
