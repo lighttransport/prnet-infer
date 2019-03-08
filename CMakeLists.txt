@@ -26,9 +26,9 @@ if (WITH_DLIB)
   set(DLIB_USE_LAPACK OFF CACHE INTERNAL "" FORCE)
   set(DLIB_USE_CUDA OFF CACHE INTERNAL "" FORCE)
 
-  add_subdirectory(${CMAKE_SOURCE_DIR}/src/dlib dlib_build)
+  add_subdirectory(${CMAKE_SOURCE_DIR}/src/dlib)
 
-  # For some reason, setting DLIB_NO_GUI_SUPPORT only effective after `add_subdirectory`
+  # For some reason, `DLIB_NO_GUI_SUPPORT` is effective after `add_subdirectory`)
   set(DLIB_NO_GUI_SUPPORT ON CACHE INTERNAL "" FORCE)
 
   include_directories(${CMAKE_SOURCE_DIR}/src/dlib)
@@ -184,7 +184,7 @@ if (WIN32)
   if (CMAKE_VERSION VERSION_GREATER 3.6.0)
     set_property(DIRECTORY PROPERTY VS_STARTUP_PROJECT prnet)
   endif ()
-  
+
   # For easier debugging in VS IDE(cmake 3.8.0 or later required)
   if (CMAKE_VERSION VERSION_GREATER 3.8.0)
     # Set working directory to $lucia git repo root.

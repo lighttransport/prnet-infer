@@ -7,6 +7,7 @@ PRNetInfer is a C++11 port of PRNet https://github.com/YadiraF/PRNet using Tenso
 ## Dependences
 
 * TensorFlow `r1.8` or later.
+  * Optional. TensorFlow lite(`r1.12` or later)
 * C++11 compiler.
 * CMake 3.5.1.
 
@@ -146,6 +147,22 @@ Wavefront .obj file will be written as `output.obj`.
 
 If you build `prnet-infer` with GUI support(`WITH_GUI` in CMake option), you can view resulting mesh.
 
+
+## TensorFlow lite(experimental)
+
+You may run PRNetInfer on TensorFlow lite(and TensorFlow lite GPU) from `r1.12`.
+
+### Convert forzen model to tflite model.
+
+```
+# Assume pip installed tensorflow.
+$ tflite_convert \
+  --output_file=/tmp/foo.tflite \
+  --graph_def_file=prnet_frozen.pb \
+  --input_arrays=Placeholder \
+  --output_arrays=resfcn256/Conv2d_transpose_16/Sigmoid
+```
+
 ## TODO
 
 * [x] Use dlib to automatically detect and crop face region.
@@ -164,7 +181,7 @@ PRnetInfer source code is licensed under MIT license. Please see `LICENSE` for d
 * PRNet : MIT license. https://github.com/YadiraF/PRNet
 * dlib : Boost Software License. http://dlib.net/
 * NanoRT : MIT license. https://github.com/lighttransport/nanort
-* ImGui : MIT license. https://github.com/ocornut/imgui 
+* ImGui : MIT license. https://github.com/ocornut/imgui
 * glfw : zlib/libpng license http://www.glfw.org/
 * cxxopts : MIT license. https://github.com/jarro2783/cxxopts
 
