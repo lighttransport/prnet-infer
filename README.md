@@ -186,6 +186,7 @@ $ python -m tf2onnx.convert \
 * [x] Face frontalization(requires dlib)
 * [x] Show landmark points.
 * [ ] Faster inference using GPU.
+* [ ] Android sample app(TensorFlow-lite, TensorFlow-lite GPU)
 
 ## License
 
