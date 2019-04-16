@@ -17,6 +17,7 @@ PRNetInfer is a C++11 port of PRNet https://github.com/YadiraF/PRNet using Tenso
 * [x] Windows10 + Visual Studio 2017
   * [ ] MinGW build may work.
 * [ ] macOS may work
+* [ ] Android(aarch64)
 
 ## Setup TensorFlow
 
