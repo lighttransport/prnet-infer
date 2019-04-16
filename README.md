@@ -163,6 +163,22 @@ $ tflite_convert \
   --output_arrays=resfcn256/Conv2d_transpose_16/Sigmoid
 ```
 
+## ONNX
+
+Convert frozen prnet model to ONNX.
+
+Install `tensorflow-onnx` https://github.com/onnx/tensorflow-onnx .
+
+Then, run following python script.
+
+```
+$ python -m tf2onnx.convert \
+    --graphdef prnet_frozen.pb \
+    --inputs="Placeholder:0" \
+    --outputs="resfcn256/Conv2d_transpose_16/Sigmoid:0" \
+    --output prnet.onnx
+```
+
 ## TODO
 
 * [x] Use dlib to automatically detect and crop face region.
