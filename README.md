@@ -170,6 +170,8 @@ Convert frozen prnet model to ONNX.
 
 Install `tensorflow-onnx` https://github.com/onnx/tensorflow-onnx .
 
+onnx opset 7 or later is required(otherwise `FusedBatchNorm` op cannot be converted to ONNX).
+
 Then, run following python script.
 
 ```
@@ -177,6 +179,7 @@ $ python -m tf2onnx.convert \
     --graphdef prnet_frozen.pb \
     --inputs="Placeholder:0" \
     --outputs="resfcn256/Conv2d_transpose_16/Sigmoid:0" \
+    --opset 7 \
     --output prnet.onnx
 ```
 
